@@ -130,7 +130,7 @@
 
   /* ---------- 도착 정보 ---------- */
   .bus-row { padding: 18px 12px 18px 18px; gap: 12px; cursor: pointer; }
-  .route { width: 64px; flex: none; }
+  .route { width: 58px; flex: none; }
   .route-no { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .route-tp { font-size: 12px; font-weight: 600; margin-top: 2px; }
   .c-express { color: var(--red); } .c-trunk { color: #2272eb; } .c-branch { color: var(--green); } .c-outer { color: var(--purple); } .c-etc { color: var(--text); }
@@ -220,6 +220,25 @@
   .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translate(-50%, 20px); background: rgba(25,31,40,.92); color: #fff; padding: 12px 18px; border-radius: 14px; font-size: 15px; font-weight: 500; z-index: 70; opacity: 0; transition: .25s; pointer-events: none; white-space: nowrap; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+  /* ---------- 즐겨찾는 버스 카드 ---------- */
+  .fb-card { background: var(--card); border-radius: 20px; box-shadow: var(--shadow); padding: 16px 18px 16px; margin-bottom: 10px; cursor: pointer; transition: transform .1s; }
+  .fb-card:active { transform: scale(.985); }
+  .fb-top { display: flex; align-items: center; gap: 8px; }
+  .fb-top .route-chip { height: 32px; font-size: 18px; padding: 0 12px; }
+  .fb-tp { font-size: 13px; font-weight: 600; }
+  .fb-star { margin-left: auto; width: 36px; height: 36px; border: 0; background: none; color: #ffc342; display: flex; align-items: center; justify-content: center; margin-right: -8px; }
+  .fb-stop { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 16px; font-weight: 600; color: var(--text); min-width: 0; }
+  .fb-stop svg { color: var(--red); flex: none; }
+  .fb-stop .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fb-stop .tag { flex: none; }
+  .fb-bottom { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .fb-eta { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .fb-eta.soon { color: var(--red); } .fb-eta.near { color: var(--orange); } .fb-eta.none { font-size: 16px; font-weight: 600; color: var(--sub); }
+  .fb-sub { font-size: 14px; color: var(--sub); font-variant-numeric: tabular-nums; }
+  .fav-bus { width: 34px; height: 38px; border: 0; background: none; color: #d1d6db; display: flex; align-items: center; justify-content: center; flex: none; margin: 0 -4px; }
+  .fav-bus.on { color: #ffc342; }
+  @media (prefers-color-scheme: dark) { .fav-bus, .star-btn { color: #4a4a55; } .fav-bus.on, .star-btn.on { color: #ffc342; } }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -266,6 +285,9 @@
       </div>
     </div>
 
+    <div class="section-title" style="margin-top:4px"><h2>즐겨찾는 버스</h2><span id="favBusCount"></span></div>
+    <div id="favBusList" style="margin-bottom:26px"></div>
+
     <form id="searchForm" class="search">
       <label class="search-box">
         <svg width="22" height="22"><use href="#i-search"/></svg>
@@ -276,7 +298,7 @@
 
     <div id="searchArea"></div>
 
-    <div class="section-title"><h2>즐겨찾기</h2><span id="favCount"></span></div>
+    <div class="section-title"><h2>즐겨찾는 정류장</h2><span id="favCount"></span></div>
     <div id="favList"></div>
   </section>
 
@@ -371,6 +393,7 @@ let serviceKey = store.get("key", "");
 let demo = store.get("demo", false);
 let favs = store.get("favs", []);      // [{id, name, no, lat, lng}]
 let alarms = store.get("alarms", {});  // { "nodeId|routeId": minutes }
+let favBuses = store.get("favBuses", []); // [{stopId, stopName, stopNo, lat, lng, routeId, routeNo, routeTp}]
 
 /* ===================== 공통 ===================== */
 const $ = id => document.getElementById(id);
@@ -409,6 +432,7 @@ function showView(name) {
   $("topTitle").classList.remove("show");
   if (name !== "stop" && name !== "bus") stopTimers();   // 지도 보는 동안에도 도착 알림은 계속
   if (name !== "bus") stopBusTimer();
+  if (name !== "home") stopHomeTimers();
   if (name === "stop" && stopMapObj) setTimeout(() => stopMapObj && stopMapObj.invalidateSize(), 50);
   if (name === "home") renderHome();
   if (name === "settings") { $("keyInput").value = serviceKey; renderDemoSwitch(); }
@@ -486,8 +510,97 @@ async function getBusLocations(routeId) {
   })).filter(v => v.lat && v.lng);
 }
 
+/* ===================== 즐겨찾는 버스 ===================== */
+let homeData = {};            // stopId -> { list, at, err }
+let homeRefreshTimer = null, homeTickTimer = null;
+
+const isFavBus = (stopId, routeId) => favBuses.some(f => f.stopId === stopId && f.routeId === routeId);
+function toggleFavBus(stop, a) {
+  if (isFavBus(stop.id, a.routeId)) {
+    favBuses = favBuses.filter(f => !(f.stopId === stop.id && f.routeId === a.routeId));
+    toast(`${a.routeNo}번을 즐겨찾기에서 뺐어요`);
+  } else {
+    favBuses.push({ stopId: stop.id, stopName: stop.name, stopNo: stop.no, lat: stop.lat, lng: stop.lng,
+                    routeId: a.routeId, routeNo: a.routeNo, routeTp: a.routeTp });
+    toast(`${stop.name} ${a.routeNo}번을 홈에 추가했어요`);
+  }
+  store.set("favBuses", favBuses);
+}
+
+function stopHomeTimers() { clearInterval(homeRefreshTimer); clearInterval(homeTickTimer); homeRefreshTimer = homeTickTimer = null; }
+
+function renderFavBuses() {
+  const box = $("favBusList");
+  $("favBusCount").textContent = favBuses.length ? favBuses.length + "개" : "";
+  if (!favBuses.length) {
+    box.innerHTML = `<div class="list"><div class="empty"><div class="big">${icon("bus", 26)}</div>정류장 화면에서 버스 옆 <b style="color:#ffc342">★</b>을 누르면<br>여기서 바로 남은 시간을 볼 수 있어요</div></div>`;
+    stopHomeTimers();
+    return;
+  }
+  box.innerHTML = "";
+  favBuses.forEach((f, idx) => {
+    const c = document.createElement("div");
+    c.className = "fb-card";
+    c.dataset.idx = idx;
+    c.innerHTML = `
+      <div class="fb-top">
+        <span class="route-chip ${routeClass(f.routeTp)}">${esc(f.routeNo)}</span>
+        <span class="fb-tp ${routeClass(f.routeTp)}">${esc(shortTp(f.routeTp))}</span>
+        <button class="fb-star" aria-label="즐겨찾기 해제">${icon("star", 22)}</button>
+      </div>
+      <div class="fb-stop">${icon("stop", 16)}<span class="nm">${esc(f.stopName)}</span>${f.stopNo ? `<span class="tag">${esc(f.stopNo)}</span>` : ""}<span style="color:var(--sub);font-weight:500;flex:none">에서 타기</span></div>
+      <div class="fb-bottom"><span class="fb-eta none">불러오는 중…</span><span class="fb-sub"></span></div>`;
+    c.querySelector(".fb-star").onclick = e => {
+      e.stopPropagation();
+      toggleFavBus({ id: f.stopId, name: f.stopName }, f);
+      renderFavBuses();
+    };
+    c.onclick = () => openStop({ id: f.stopId, name: f.stopName, no: f.stopNo, lat: f.lat, lng: f.lng });
+    box.appendChild(c);
+  });
+  updateFavBusEtas();
+}
+
+async function loadHomeEtas() {
+  if (!favBuses.length || (!serviceKey && !demo)) return;
+  const stopIds = [...new Set(favBuses.map(f => f.stopId))];
+  await Promise.all(stopIds.map(async id => {
+    try { homeData[id] = { list: await getArrivals(id), at: Date.now() }; }
+    catch (err) { homeData[id] = { err, at: Date.now() }; }
+  }));
+  updateFavBusEtas();
+}
+
+function updateFavBusEtas() {
+  document.querySelectorAll("#favBusList .fb-card").forEach(c => {
+    const f = favBuses[c.dataset.idx];
+    if (!f) return;
+    const etaEl = c.querySelector(".fb-eta"), subEl = c.querySelector(".fb-sub");
+    if (!serviceKey && !demo) { etaEl.className = "fb-eta none"; etaEl.textContent = "인증키가 필요해요"; subEl.textContent = ""; return; }
+    const d = homeData[f.stopId];
+    if (!d) return;
+    if (d.err) { etaEl.className = "fb-eta none"; etaEl.textContent = "정보를 못 불러왔어요"; subEl.textContent = ""; return; }
+    const buses = d.list.filter(a => a.routeId === f.routeId).sort((x, y) => x.sec - y.sec);
+    if (!buses.length) { etaEl.className = "fb-eta none"; etaEl.textContent = "도착 예정 버스 없음"; subEl.textContent = ""; return; }
+    const rem = a => Math.max(0, Math.round(a.sec - (Date.now() - d.at) / 1000));
+    const r = rem(buses[0]);
+    etaEl.className = "fb-eta" + (r < 120 ? " soon" : r < 300 ? " near" : "");
+    etaEl.textContent = fmt(r);
+    let sub = `${buses[0].prev}정거장 전`;
+    if (buses[1]) { const r2 = rem(buses[1]); sub += ` · 다음 ${r2 < 60 ? "곧" : Math.floor(r2 / 60) + "분"}`; }
+    subEl.textContent = sub;
+  });
+}
+
 /* ===================== 홈 ===================== */
 function renderHome() {
+  renderFavBuses();
+  stopHomeTimers();
+  if (favBuses.length) {
+    loadHomeEtas();
+    homeRefreshTimer = setInterval(loadHomeEtas, REFRESH_SEC * 1000);
+    homeTickTimer = setInterval(updateFavBusEtas, 1000);
+  }
   $("keyWarn").classList.toggle("hidden", !!serviceKey || demo);
   $("homeSub").innerHTML = "대전 시내버스 실시간 도착 정보" + (demo ? ' <span class="tag demo">체험 모드</span>' : "");
   $("favCount").textContent = favs.length ? favs.length + "개" : "";
@@ -661,7 +774,7 @@ function openStop(s) {
 function renderFavBtn() {
   const on = favs.some(f => f.id === currentStop.id);
   $("favBtn").classList.toggle("on", on);
-  $("favBtn").querySelector("span").textContent = on ? "즐겨찾기됨" : "즐겨찾기";
+  $("favBtn").querySelector("span").textContent = on ? "정류장 저장됨" : "정류장 저장";
 }
 $("favBtn").onclick = () => { toggleFav(currentStop); renderFavBtn(); };
 
@@ -718,9 +831,14 @@ function renderArrivals() {
         <div class="eta" data-r="${esc(a.routeId)}" data-i="0"></div>
         <div class="meta">${a.prev}정거장 전${/저상/.test(a.vehicleTp) ? " · 저상" : ""}${g[1] ? ` · <span class="next">다음 <span data-r="${esc(a.routeId)}" data-i="1"></span></span>` : ""}</div>
       </div>
+      <button class="fav-bus ${isFavBus(currentStop.id, a.routeId) ? "on" : ""}" aria-label="즐겨찾는 버스">${icon("star", 22)}</button>
       <button class="bell ${on ? "on" : ""}" aria-label="도착 알림">${on ? icon("bell-fill", 16) + on + "분" : icon("bell", 18)}</button>
       <svg class="chev" width="18" height="18"><use href="#i-chev"/></svg>`;
     el.querySelector(".bell").onclick = e => { e.stopPropagation(); openSheet(a); };
+    el.querySelector(".fav-bus").onclick = e => {
+      e.stopPropagation(); toggleFavBus(currentStop, a);
+      e.currentTarget.classList.toggle("on", isFavBus(currentStop.id, a.routeId));
+    };
     el.onclick = () => openBus(a);
     list.appendChild(el);
   });
@@ -933,7 +1051,9 @@ window.addEventListener("touchend", e => {
   startY = null;
 }, { passive: true });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden || !currentStop) return;
+  if (document.hidden) return;
+  if (currentView === "home") loadHomeEtas();
+  if (!currentStop) return;
   if (currentView === "stop" || currentView === "bus") refresh();
   if (currentView === "bus") busRefresh();
 });

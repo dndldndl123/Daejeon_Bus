@@ -99,6 +99,10 @@
   .leaflet-popup-content { font-size: 14px; margin: 12px 14px; }
   .leaflet-popup-content b { font-size: 15px; }
   .pop-btn { display: block; width: 100%; margin-top: 8px; border: 0; border-radius: 10px; padding: 10px; background: #0b5cff; color: #fff; font-weight: 700; font-size: 14px; }
+  .bus-pin { font-size: 22px; line-height: 30px; width: 34px; height: 34px; text-align: center; background: #fff; border-radius: 50%; border: 3px solid var(--orange); box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+  .bus-pin.coming { border-color: var(--red); }
+  .bus { cursor: pointer; }
+  .tap-hint { font-size: 12px; color: var(--pri); margin-top: 3px; }
   .hidden { display: none !important; }
   .spin { display: inline-block; animation: rot 1s linear infinite; }
   @keyframes rot { to { transform: rotate(360deg); } }
@@ -147,6 +151,18 @@
     <div id="arrList"></div>
   </section>
 
+  <!-- 버스 실시간 위치 -->
+  <section id="busView" class="hidden">
+    <div id="busMap" class="map" style="height:58vh"></div>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn ghost" style="flex:1;padding:10px 6px" id="fitBusBtn">🚌 버스</button>
+      <button class="btn ghost" style="flex:1;padding:10px 6px" id="fitStopBtn">🚏 정류장</button>
+      <button class="btn ghost" style="flex:1;padding:10px 6px" id="fitBothBtn">↔ 둘 다</button>
+    </div>
+    <div id="busInfo"></div>
+    <div id="busStatus" class="status"></div>
+  </section>
+
   <!-- 설정 -->
   <section id="settingsView" class="hidden">
     <div class="card">
@@ -162,6 +178,7 @@
       1. <a href="https://www.data.go.kr" target="_blank" rel="noopener">data.go.kr</a> 가입 후 로그인<br>
       2. <b>국토교통부_(TAGO)_버스도착정보</b> 검색 → 활용신청<br>
       3. <b>국토교통부_(TAGO)_버스정류소정보</b>도 똑같이 활용신청<br>
+      &nbsp;&nbsp;&nbsp;(버스 위치 지도용) <b>버스위치정보</b>, <b>버스노선정보</b>도 신청<br>
       4. 마이페이지 → 개발계정 → <b>일반 인증키(Decoding)</b> 복사<br>
       5. 위 칸에 붙여넣고 저장<br><br>
       ※ 신청 직후에는 키가 활성화되기까지 1시간 정도 걸릴 수 있어요.<br>
@@ -213,17 +230,25 @@ let fetchedAt = 0;
 let refreshTimer = null, tickTimer = null;
 const fired = new Set(); // 이미 울린 알림 (버스 회차별)
 
+let currentView = "home";
 function showView(name) {
-  ["homeView", "stopView", "settingsView"].forEach(v => $(v).classList.add("hidden"));
+  currentView = name;
+  ["homeView", "stopView", "busView", "settingsView"].forEach(v => $(v).classList.add("hidden"));
   $(name + "View").classList.remove("hidden");
   $("backBtn").classList.toggle("hidden", name === "home");
   $("settingsBtn").classList.toggle("hidden", name === "settings");
-  if (name !== "stop") stopTimers();
+  // 버스 지도 보는 동안에도 도착 알림은 계속 동작
+  if (name !== "stop" && name !== "bus") stopTimers();
+  if (name !== "bus") stopBusTimer();
+  if (name === "stop" && stopMapObj) setTimeout(() => stopMapObj && stopMapObj.invalidateSize(), 50);
   if (name === "home") { $("title").innerHTML = "🚌 대전 버스 알림" + (demo ? '<span class="demo-tag">체험</span>' : ""); renderHome(); }
   if (name === "settings") { $("title").textContent = "설정"; $("keyInput").value = serviceKey; renderDemoToggle(); }
   window.scrollTo(0, 0);
 }
-$("backBtn").onclick = () => showView("home");
+$("backBtn").onclick = () => {
+  if (currentView === "bus") { showView("stop"); $("title").textContent = currentStop.name; }
+  else showView("home");
+};
 $("settingsBtn").onclick = () => showView("settings");
 
 /* ===================== API ===================== */
@@ -233,7 +258,7 @@ function keyParam() {
 }
 
 async function callApi(path, params) {
-  const qs = Object.entries({ ...params, _type: "json", numOfRows: 100, pageNo: 1 })
+  const qs = Object.entries({ _type: "json", numOfRows: 100, pageNo: 1, ...params })
     .map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
   const url = `${API}/${path}?serviceKey=${keyParam()}&${qs}`;
   let res;
@@ -513,12 +538,16 @@ function renderArrivals() {
       <div class="grow">
         <div class="arr" data-r="${a.routeId}" data-i="0"></div>
         <div class="sub"></div>
-        ${g[1] ? `<div class="sub">다음 버스 <span data-r="${a.routeId}" data-i="1"></span></div>` : ""}
+        ${g[1] ? `<div class="sub next-bus">다음 버스 <span data-r="${a.routeId}" data-i="1"></span> 🗺️</div>` : ""}
+        <div class="tap-hint">눌러서 이 버스 위치 보기 🗺️</div>
       </div>
       <button class="bell ${on ? "on" : ""}">${on ? "🔔 " + on + "분" : "🔕"}</button>`;
     el.querySelector(".badge").textContent = a.routeNo;
     el.querySelector(".sub").textContent = `${a.prev}정거장 전` + (a.routeTp ? " · " + a.routeTp : "") + (/저상/.test(a.vehicleTp) ? " · 저상" : "");
-    el.querySelector(".bell").onclick = () => openSheet(a);
+    el.querySelector(".bell").onclick = e => { e.stopPropagation(); openSheet(a); };
+    el.onclick = () => openBus(a);
+    const nb = el.querySelector(".next-bus");
+    if (nb) nb.onclick = e => { e.stopPropagation(); openBus(g[1]); };
     box.appendChild(el);
   });
   tick();
@@ -540,6 +569,161 @@ function tick() {
     checkAlarm(g[0]);
   });
 }
+
+/* ===================== 고른 버스 한 대 실시간 추적 ===================== */
+const BUS_REFRESH_SEC = 15;
+let busMapObj = null, busMarker = null, busLine = null, busTimer = null;
+let track = null;
+// track = { routeId, routeNo, startPrev, startSec, routeStops, myOrds, vehicleNo, bus, arr, firstFit }
+
+function stopBusTimer() { clearInterval(busTimer); busTimer = null; }
+
+async function getRouteStops(routeId) {
+  if (demo) return DEMO.routeStops(currentStop);
+  const list = await callApi("BusRouteInfoInqireService/getRouteAcctoThrghSttnList", { cityCode: CITY, routeId, numOfRows: 500 });
+  return list.map(i => ({ id: String(i.nodeid), name: i.nodenm, ord: Number(i.nodeord), lat: Number(i.gpslati) || null, lng: Number(i.gpslong) || null }))
+    .sort((x, y) => x.ord - y.ord);
+}
+
+async function getBusLocations(routeId) {
+  if (demo) return DEMO.vehicles();
+  const list = await callApi("BusLcInfoInqireService/getRouteAcctoBusLcList", { cityCode: CITY, routeId });
+  return list.map(i => ({
+    vehicleNo: String(i.vehicleno), ord: Number(i.nodeord), nodeId: String(i.nodeid), nodeName: i.nodenm,
+    lat: Number(i.gpslati), lng: Number(i.gpslong)
+  })).filter(v => v.lat && v.lng);
+}
+
+async function openBus(a) {
+  track = { routeId: a.routeId, routeNo: a.routeNo, startPrev: a.prev, startSec: remain(a),
+            routeStops: null, myOrds: [], vehicleNo: null, bus: null, arr: a, firstFit: true, routeErr: null };
+  $("title").textContent = `${a.routeNo}번 → ${currentStop.name}`;
+  $("busInfo").innerHTML = "";
+  $("busStatus").innerHTML = `<span class="spin">⏳</span> 버스 찾는 중…`;
+  showView("bus");
+
+  if (busMapObj) { busMapObj.remove(); busMapObj = null; }
+  busMarker = busLine = null;
+  if (window.L) {
+    busMapObj = L.map($("busMap"));
+    tiles(busMapObj);
+    if (currentStop.lat) {
+      busMapObj.setView([currentStop.lat, currentStop.lng], 16);
+      L.marker([currentStop.lat, currentStop.lng], { icon: numIcon("🚏", true) }).addTo(busMapObj)
+        .bindPopup(`<b>${escapeHtml(currentStop.name)}</b><br>내가 탈 정류장`);
+    } else busMapObj.setView([36.3504, 127.3845], 13);
+    if (myPosCache) meMarker(busMapObj, myPosCache);
+    setTimeout(() => busMapObj && busMapObj.invalidateSize(), 50);
+  }
+
+  // 노선 정류장 순서 (내 정류장이 몇 번째인지 알아야 '그 버스'를 고를 수 있음)
+  try {
+    track.routeStops = await getRouteStops(a.routeId);
+    track.myOrds = track.routeStops.filter(s => s.id === currentStop.id).map(s => s.ord);
+  } catch (err) { track.routeErr = err; }
+
+  await busRefresh();
+  busTimer = setInterval(busRefresh, BUS_REFRESH_SEC * 1000);
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+// "N정거장 전" 정보로 정확히 그 버스 한 대를 고름
+function pickBus(vehicles) {
+  if (track.vehicleNo) return vehicles.find(v => v.vehicleNo === track.vehicleNo) || null;
+  if (!track.myOrds.length) return null;
+  let best = null, bestScore = Infinity;
+  for (const myOrd of track.myOrds) {
+    const target = myOrd - track.startPrev;
+    for (const v of vehicles) {
+      if (v.ord > myOrd) continue;                 // 이미 지나간 버스 제외
+      const score = Math.abs(v.ord - target);
+      if (score < bestScore) { bestScore = score; best = { ...v, myOrd }; }
+    }
+  }
+  if (best && bestScore <= 2) { track.vehicleNo = best.vehicleNo; track.myOrd = best.myOrd; return best; }
+  return null;
+}
+
+async function busRefresh() {
+  if (!track) return;
+  let vehicles;
+  try { vehicles = await getBusLocations(track.routeId); }
+  catch (err) { $("busStatus").textContent = ""; $("busInfo").innerHTML = ""; showErr($("busInfo"), err); return; }
+
+  const v = pickBus(vehicles);
+  const info = $("busInfo");
+
+  if (!v) {
+    if (track.vehicleNo) {
+      info.innerHTML = `<div class="card help"><b>${escapeHtml(track.routeNo)}번 (${escapeHtml(track.vehicleNo)})</b> 버스가 더 이상 안 보여요.<br>정류장을 지나갔거나 운행 정보가 잠시 끊겼을 수 있어요.</div>`;
+    } else if (track.routeErr) {
+      info.innerHTML = "";
+      showErr(info, new Error("노선 정보를 못 불러와서 어떤 버스인지 고를 수 없어요.\ndata.go.kr에서 '국토교통부_(TAGO)_버스노선정보'도 활용신청해 주세요.\n\n(" + track.routeErr.message + ")"));
+    } else {
+      info.innerHTML = `<div class="card help">지금 그 ${escapeHtml(track.routeNo)}번 버스 위치를 찾지 못했어요. 잠시 후 다시 시도할게요.</div>`;
+    }
+    $("busStatus").textContent = `${BUS_REFRESH_SEC}초마다 자동 갱신`;
+    return;
+  }
+  track.bus = v;
+
+  // 남은 정거장 수 / 남은 시간 (도착정보에서 같은 노선 중 정거장 수가 맞는 항목 사용)
+  const left = track.myOrd != null ? Math.max(0, track.myOrd - v.ord) : null;
+  const sameRoute = arrivals.filter(x => x.routeId === track.routeId);
+  let arr = null;
+  if (sameRoute.length) {
+    arr = left != null ? sameRoute.reduce((p, c) => Math.abs(c.prev - left) < Math.abs(p.prev - left) ? c : p) : sameRoute[0];
+  }
+  const timeText = arr ? fmt(remain(arr)) : "";
+
+  info.innerHTML = `
+    <div class="bus" style="cursor:default">
+      <div class="badge ${badgeClass(track.arr.routeTp)}"></div>
+      <div class="grow">
+        <div class="arr ${arr && remain(arr) < 120 ? "soon" : ""}"></div>
+        <div class="sub"></div>
+        <div class="sub"></div>
+      </div>
+    </div>`;
+  info.querySelector(".badge").textContent = track.routeNo;
+  info.querySelector(".arr").textContent = timeText ? timeText + (timeText === "곧 도착" ? "" : " 남음") : (left != null ? `${left}정거장 전` : "");
+  const subs = info.querySelectorAll(".sub");
+  subs[0].textContent = (left != null ? `${left}정거장 전 · ` : "") + "지금 " + (v.nodeName || "-") + " 부근";
+  subs[1].textContent = "차량 " + v.vehicleNo;
+
+  $("busStatus").textContent = `방금 업데이트 · ${BUS_REFRESH_SEC}초마다 자동 갱신`;
+
+  // 지도
+  if (!busMapObj) return;
+  const ll = [v.lat, v.lng];
+  if (!busMarker) {
+    busMarker = L.marker(ll, { icon: L.divIcon({ className: "", html: '<div class="bus-pin coming">🚌</div>', iconSize: [34, 34], iconAnchor: [17, 17] }), zIndexOffset: 1000 }).addTo(busMapObj);
+  } else busMarker.setLatLng(ll);
+  busMarker.bindPopup(`<b>${escapeHtml(track.routeNo)}번</b><br>${escapeHtml(v.vehicleNo)}<br>${escapeHtml(v.nodeName || "")} 부근`);
+
+  // 버스 → 내 정류장까지 남은 경로
+  if (busLine) { busLine.remove(); busLine = null; }
+  if (track.routeStops && track.myOrd != null) {
+    const path = track.routeStops.filter(s => s.ord >= v.ord && s.ord <= track.myOrd && s.lat).map(s => [s.lat, s.lng]);
+    if (path.length) busLine = L.polyline([ll, ...path], { color: "#0b5cff", weight: 5, opacity: .7, dashArray: "8 8" }).addTo(busMapObj);
+  }
+
+  if (track.firstFit) { fitBoth(); track.firstFit = false; }
+}
+
+function fitBoth() {
+  if (!busMapObj) return;
+  const pts = [];
+  if (track?.bus) pts.push([track.bus.lat, track.bus.lng]);
+  if (currentStop?.lat) pts.push([currentStop.lat, currentStop.lng]);
+  if (busLine) busLine.getLatLngs().forEach(p => pts.push([p.lat, p.lng]));
+  if (pts.length === 1) busMapObj.setView(pts[0], 16);
+  else if (pts.length) busMapObj.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
+}
+$("fitBothBtn").onclick = fitBoth;
+$("fitStopBtn").onclick = () => busMapObj && currentStop?.lat && busMapObj.setView([currentStop.lat, currentStop.lng], 17);
+$("fitBusBtn").onclick = () => busMapObj && track?.bus && busMapObj.setView([track.bus.lat, track.bus.lng], 17);
 
 /* ===================== 알림 ===================== */
 let sheetBus = null;
@@ -628,7 +812,11 @@ window.addEventListener("touchend", e => {
   if (startY != null && !$("stopView").classList.contains("hidden") && e.changedTouches[0].clientY - startY > 90) refresh();
   startY = null;
 }, { passive: true });
-document.addEventListener("visibilitychange", () => { if (!document.hidden && currentStop && !$("stopView").classList.contains("hidden")) refresh(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !currentStop) return;
+  if (currentView === "stop" || currentView === "bus") refresh();
+  if (currentView === "bus") busRefresh();
+});
 
 /* ===================== 설정 ===================== */
 $("saveKeyBtn").onclick = () => {
@@ -652,6 +840,24 @@ const DEMO = {
     { id: "DEMO2", name: "시청 (체험)", no: "00002", lat: 36.35060, lng: 127.38470 },
     { id: "DEMO3", name: "충남대학교 (체험)", no: "00003", lat: 36.36640, lng: 127.34460 }
   ],
+  // 내 정류장(8번째)으로 오는 가짜 노선: 남서쪽에서 들어옴
+  routeStops(stop) {
+    const lat = stop.lat || 36.3319, lng = stop.lng || 127.4328;
+    return Array.from({ length: 12 }, (_, k) => {
+      const ord = k + 1, d = 8 - ord;
+      return { id: ord === 8 ? stop.id : "DS" + ord, name: ord === 8 ? stop.name : `체험정류장${ord}`, ord,
+               lat: lat - d * 0.0016 + Math.sin(ord) * 0.0004, lng: lng - d * 0.0019 };
+    });
+  },
+  vehicles() {
+    const rs = DEMO.routeStops(currentStop);
+    const t = (Date.now() / 1000) % 240 / 240;           // 4분에 정류장 6개 이동
+    const mk = (no, pos) => {
+      const i = Math.min(Math.floor(pos), 10), f = pos - i, a = rs[i], b = rs[i + 1];
+      return { vehicleNo: no, ord: a.ord, nodeId: a.id, nodeName: a.name, lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
+    };
+    return [mk("대전75자1234", 1 + t * 6), mk("대전75자5678", Math.max(0, t * 6 - 4))];
+  },
   arrivals() {
     const r = (a, b) => a + Math.floor(Math.random() * (b - a));
     return [

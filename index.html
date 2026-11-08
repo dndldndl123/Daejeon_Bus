@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0b5cff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>대전 버스 알림</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   :root {
     --bg: #f3f5f9; --card: #fff; --text: #16181d; --sub: #6b7280; --line: #e5e7eb;
@@ -78,6 +80,20 @@
   .alarm-bg .big { font-size: 56px; font-weight: 900; margin: 10px 0; }
   .alarm-bg .msg { font-size: 22px; font-weight: 700; line-height: 1.5; }
   .alarm-bg button { margin-top: 30px; background: #fff; color: var(--red); border: 0; border-radius: 14px; padding: 16px 40px; font-size: 18px; font-weight: 800; }
+  .map { height: 280px; border-radius: 14px; overflow: hidden; margin-bottom: 10px; position: relative; z-index: 0; background: var(--line); }
+  .map.small { height: 190px; }
+  .map-hint { font-size: 13px; color: var(--sub); margin: -2px 4px 10px; line-height: 1.5; }
+  .pin {
+    background: var(--pri); color: #fff; font-weight: 800; font-size: 12px; border-radius: 50%;
+    width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4);
+  }
+  .pin.sel { background: var(--red); width: 32px; height: 32px; font-size: 14px; }
+  .me-dot { width: 16px; height: 16px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(26,115,232,.25); }
+  .num { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; border-radius: 50%; background: var(--pri); color: #fff; font-size: 12px; font-weight: 800; margin-right: 6px; vertical-align: 1px; }
+  .leaflet-popup-content { font-size: 14px; margin: 12px 14px; }
+  .leaflet-popup-content b { font-size: 15px; }
+  .pop-btn { display: block; width: 100%; margin-top: 8px; border: 0; border-radius: 10px; padding: 10px; background: #0b5cff; color: #fff; font-weight: 700; font-size: 14px; }
   .hidden { display: none !important; }
   .spin { display: inline-block; animation: rot 1s linear infinite; }
   @keyframes rot { to { transform: rotate(360deg); } }
@@ -121,6 +137,7 @@
 
   <!-- 정류장 도착정보 -->
   <section id="stopView" class="hidden">
+    <div id="stopMap" class="map small hidden"></div>
     <div id="stopStatus" class="status"></div>
     <div id="arrList"></div>
   </section>
@@ -246,14 +263,17 @@ async function searchStops(keyword) {
   const isNum = /^\d+$/.test(keyword);
   const list = await callApi("BusSttnInfoInqireService/getSttnNoList",
     isNum ? { cityCode: CITY, nodeNo: keyword } : { cityCode: CITY, nodeNm: keyword });
-  return list.map(i => ({ id: i.nodeid, name: i.nodenm, no: String(i.nodeno ?? "") }));
+  return list.map(toStop);
+}
+
+function toStop(i) {
+  return { id: i.nodeid, name: i.nodenm, no: String(i.nodeno ?? ""), lat: Number(i.gpslati) || null, lng: Number(i.gpslong) || null };
 }
 
 async function nearStops(lat, lng) {
   if (demo) return DEMO.stops;
   const list = await callApi("BusSttnInfoInqireService/getCrdntPrxmtSttnList", { gpsLati: lat, gpsLong: lng });
-  return list.filter(i => String(i.citycode) === CITY || !i.citycode)
-    .map(i => ({ id: i.nodeid, name: i.nodenm, no: String(i.nodeno ?? "") }));
+  return list.filter(i => String(i.citycode) === CITY || !i.citycode).map(toStop);
 }
 
 async function getArrivals(nodeId) {
@@ -277,13 +297,13 @@ function renderHome() {
   favs.forEach(s => box.appendChild(stopItem(s)));
 }
 
-function stopItem(s) {
+function stopItem(s, num) {
   const el = document.createElement("div");
   el.className = "item";
   const isFav = favs.some(f => f.id === s.id);
-  el.innerHTML = `<div class="grow"><div class="name"></div><div class="meta"></div></div>
+  el.innerHTML = `<div class="grow"><div class="name">${num ? `<span class="num">${num}</span>` : ""}<span></span></div><div class="meta"></div></div>
                   <button class="star" aria-label="즐겨찾기">${isFav ? "★" : "☆"}</button>`;
-  el.querySelector(".name").textContent = s.name;
+  el.querySelector(".name span:last-child").textContent = s.name;
   el.querySelector(".meta").textContent = s.no ? "정류장 번호 " + s.no : s.id;
   el.querySelector(".star").onclick = e => { e.stopPropagation(); toggleFav(s); e.target.textContent = favs.some(f => f.id === s.id) ? "★" : "☆"; if (!$("homeView").classList.contains("hidden")) renderHome(); };
   el.onclick = () => openStop(s);
@@ -292,7 +312,7 @@ function stopItem(s) {
 
 function toggleFav(s) {
   if (favs.some(f => f.id === s.id)) favs = favs.filter(f => f.id !== s.id);
-  else favs.push({ id: s.id, name: s.name, no: s.no });
+  else favs.push({ id: s.id, name: s.name, no: s.no, lat: s.lat, lng: s.lng });
   store.set("favs", favs);
 }
 
@@ -302,12 +322,84 @@ function needKey() {
   return true;
 }
 
-function showResults(title, list) {
+function showResults(title, list, myPos) {
   const area = $("searchArea");
   area.innerHTML = `<h2></h2>`;
   area.querySelector("h2").textContent = title;
   if (!list.length) { area.innerHTML += `<div class="empty">결과가 없어요.</div>`; return; }
-  list.slice(0, 40).forEach(s => area.appendChild(stopItem(s)));
+  list = list.slice(0, 40);
+
+  const withPos = list.filter(s => s.lat && s.lng);
+  if (withPos.length && window.L) {
+    const mapEl = document.createElement("div");
+    mapEl.className = "map";
+    area.appendChild(mapEl);
+    const hint = document.createElement("div");
+    hint.className = "map-hint";
+    hint.textContent = "같은 이름 정류장은 길 건너편일 수 있어요. 번호 핀을 눌러 위치를 확인하세요.";
+    area.appendChild(hint);
+    drawResultMap(mapEl, list, myPos);
+  }
+  list.forEach((s, idx) => area.appendChild(stopItem(s, s.lat ? idx + 1 : null)));
+}
+
+/* ===================== 지도 ===================== */
+let resultMap = null, stopMapObj = null;
+let myPosCache = null;
+
+function tiles(map) {
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "© OpenStreetMap"
+  }).addTo(map);
+}
+function numIcon(n, sel) {
+  return L.divIcon({ className: "", html: `<div class="pin ${sel ? "sel" : ""}">${n}</div>`, iconSize: [sel ? 32 : 26, sel ? 32 : 26], iconAnchor: [sel ? 16 : 13, sel ? 16 : 13] });
+}
+function meMarker(map, pos) {
+  if (!pos) return;
+  L.marker([pos.lat, pos.lng], { icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false }).addTo(map);
+}
+
+function drawResultMap(el, list, myPos) {
+  if (resultMap) { resultMap.remove(); resultMap = null; }
+  resultMap = L.map(el, { zoomControl: true, attributionControl: true });
+  tiles(resultMap);
+  const pts = [];
+  list.forEach((s, idx) => {
+    if (!s.lat || !s.lng) return;
+    pts.push([s.lat, s.lng]);
+    const m = L.marker([s.lat, s.lng], { icon: numIcon(idx + 1) }).addTo(resultMap);
+    const box = document.createElement("div");
+    box.innerHTML = `<b></b><div style="color:#666;margin-top:2px"></div><button class="pop-btn">도착정보 보기</button>`;
+    box.querySelector("b").textContent = `${idx + 1}. ${s.name}`;
+    box.querySelector("div").textContent = s.no ? "정류장 번호 " + s.no : "";
+    box.querySelector("button").onclick = () => openStop(s);
+    m.bindPopup(box);
+  });
+  const me = myPos || myPosCache;
+  if (me) { meMarker(resultMap, me); pts.push([me.lat, me.lng]); }
+  if (pts.length === 1) resultMap.setView(pts[0], 17);
+  else resultMap.fitBounds(pts, { padding: [30, 30], maxZoom: 17 });
+  setTimeout(() => resultMap && resultMap.invalidateSize(), 50);
+}
+
+function drawStopMap(s) {
+  const el = $("stopMap");
+  if (stopMapObj) { stopMapObj.remove(); stopMapObj = null; }
+  if (!s.lat || !s.lng || !window.L) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  stopMapObj = L.map(el, { zoomControl: false });
+  tiles(stopMapObj);
+  L.marker([s.lat, s.lng], { icon: numIcon("🚏", true) }).addTo(stopMapObj);
+  stopMapObj.setView([s.lat, s.lng], 18);
+  if (myPosCache) meMarker(stopMapObj, myPosCache);
+  setTimeout(() => stopMapObj && stopMapObj.invalidateSize(), 50);
+}
+
+// 내 위치를 조용히 한 번 가져와 둠 (권한 있으면 지도에 파란 점 표시)
+function warmMyPos() {
+  if (!navigator.geolocation || demo) return;
+  navigator.geolocation.getCurrentPosition(p => { myPosCache = { lat: p.coords.latitude, lng: p.coords.longitude }; }, () => {}, { timeout: 8000, maximumAge: 60000 });
 }
 
 $("searchForm").onsubmit = async e => {
@@ -326,7 +418,8 @@ $("nearBtn").onclick = () => {
   if (!navigator.geolocation) { showErr($("searchArea"), new Error("이 브라우저는 위치 기능을 지원하지 않아요.")); return; }
   $("searchArea").innerHTML = `<div class="status"><span class="spin">⏳</span> 위치 확인 중…</div>`;
   navigator.geolocation.getCurrentPosition(async pos => {
-    try { showResults("내 주변 정류장", await nearStops(pos.coords.latitude, pos.coords.longitude)); }
+    myPosCache = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    try { showResults("내 주변 정류장", await nearStops(myPosCache.lat, myPosCache.lng), myPosCache); }
     catch (err) { $("searchArea").innerHTML = ""; showErr($("searchArea"), err); }
   }, err => {
     $("searchArea").innerHTML = "";
@@ -347,6 +440,7 @@ function openStop(s) {
   $("title").textContent = s.name;
   $("arrList").innerHTML = "";
   showView("stop");
+  drawStopMap(s);
   refresh();
   refreshTimer = setInterval(refresh, REFRESH_SEC * 1000);
   tickTimer = setInterval(tick, 1000);
@@ -548,9 +642,10 @@ function enableDemo() { demo = true; store.set("demo", true); showView("home"); 
 /* ===================== 체험 모드 데이터 (가짜) ===================== */
 const DEMO = {
   stops: [
-    { id: "DEMO1", name: "대전역 (체험)", no: "00001" },
-    { id: "DEMO2", name: "시청 (체험)", no: "00002" },
-    { id: "DEMO3", name: "충남대학교 (체험)", no: "00003" }
+    { id: "DEMO1", name: "대전역 (체험)", no: "00001", lat: 36.33190, lng: 127.43280 },
+    { id: "DEMO1B", name: "대전역 (체험)", no: "00011", lat: 36.33165, lng: 127.43335 },
+    { id: "DEMO2", name: "시청 (체험)", no: "00002", lat: 36.35060, lng: 127.38470 },
+    { id: "DEMO3", name: "충남대학교 (체험)", no: "00003", lat: 36.36640, lng: 127.34460 }
   ],
   arrivals() {
     const r = (a, b) => a + Math.floor(Math.random() * (b - a));
@@ -565,6 +660,7 @@ const DEMO = {
 };
 
 showView("home");
+warmMyPos();
 </script>
 </body>
 </html>

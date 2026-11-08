@@ -586,8 +586,8 @@ $("nearBtn").onclick = () => {
 let resultMap = null, stopMapObj = null, myPosCache = null;
 
 function tiles(map) {
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-    maxZoom: 19, subdomains: "abcd", attribution: "© OpenStreetMap © CARTO"
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "© OpenStreetMap"
   }).addTo(map);
 }
 const numIcon = n => L.divIcon({ className: "", html: `<div class="pin">${n}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
@@ -612,9 +612,15 @@ function drawResultMap(el, list, myPos) {
     m.bindPopup(box, { closeButton: false });
   });
   const me = myPos || myPosCache;
-  if (me) { meMarker(resultMap, me); pts.push([me.lat, me.lng]); }
-  if (pts.length === 1) resultMap.setView(pts[0], 17);
-  else resultMap.fitBounds(pts, { padding: [36, 36], maxZoom: 17 });
+  if (me) meMarker(resultMap, me);
+  // 정류장끼리만 먼저 맞추고(가까우면 크게 확대해서 핀이 안 겹치게), 내 위치는 너무 멀지 않을 때만 포함
+  const stopPts = pts.slice();
+  if (me) {
+    const near = stopPts.some(p => Math.abs(p[0] - me.lat) < 0.01 && Math.abs(p[1] - me.lng) < 0.01);
+    if (near) pts.push([me.lat, me.lng]);
+  }
+  if (pts.length === 1) resultMap.setView(pts[0], 18);
+  else resultMap.fitBounds(pts, { padding: [40, 40], maxZoom: 19 });
   setTimeout(() => resultMap && resultMap.invalidateSize(), 50);
 }
 

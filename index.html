@@ -3,214 +3,364 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b5cff">
+<meta name="theme-color" content="#f2f4f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17171c" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="버스알림">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>대전 버스 알림</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   :root {
-    --bg: #f3f5f9; --card: #fff; --text: #16181d; --sub: #6b7280; --line: #e5e7eb;
-    --pri: #0b5cff; --pri-soft: #e7efff; --red: #e5333b; --orange: #f08c00; --green: #12a150;
+    --bg: #f2f4f6; --card: #ffffff; --text: #191f28; --text2: #4e5968; --sub: #8b95a1; --line: #eef0f3;
+    --fill: #f2f4f6; --pri: #3182f6; --pri-soft: #e8f3ff; --red: #f04452; --red-soft: #ffeeee;
+    --orange: #fe9800; --green: #03b26c; --purple: #8b5cf6;
+    --shadow: 0 2px 12px rgba(0,0,0,.05);
+    --top: calc(env(safe-area-inset-top) + 54px);
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f1115; --card: #1a1d24; --text: #f1f3f7; --sub: #9aa1ad; --line: #2a2f39; --pri-soft: #1c2a4a; }
+    :root {
+      --bg: #17171c; --card: #202027; --text: #f5f6f7; --text2: #c3c6cc; --sub: #8e9099; --line: #2c2c35;
+      --fill: #2c2c35; --pri-soft: #1f2b45; --red-soft: #3a2025; --shadow: none;
+    }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-    padding-bottom: env(safe-area-inset-bottom);
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    letter-spacing: -0.02em; -webkit-font-smoothing: antialiased;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
   }
-  header {
-    position: sticky; top: 0; z-index: 10; background: var(--pri); color: #fff;
-    padding: calc(env(safe-area-inset-top) + 12px) 16px 12px; display: flex; align-items: center; gap: 8px;
+  button { font-family: inherit; letter-spacing: inherit; cursor: pointer; }
+  svg { display: block; }
+
+  /* ---------- 상단 바 ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20; height: var(--top);
+    padding: env(safe-area-inset-top) 8px 0; display: flex; align-items: center; gap: 4px;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px);
   }
-  header h1 { font-size: 18px; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  header button { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 10px; padding: 8px 12px; font-size: 15px; }
-  main { padding: 14px; max-width: 640px; margin: 0 auto; }
-  .card { background: var(--card); border-radius: 16px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-  .row { display: flex; gap: 8px; }
-  input {
-    flex: 1; min-width: 0; font-size: 16px; padding: 12px 14px; border-radius: 12px;
-    border: 1px solid var(--line); background: var(--bg); color: var(--text); outline: none;
+  .topbar .t { flex: 1; font-size: 17px; font-weight: 700; text-align: center; opacity: 0; transition: opacity .2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar .t.show { opacity: 1; }
+  .icon-btn {
+    width: 44px; height: 44px; border: 0; background: none; color: var(--text); border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; flex: none;
   }
-  input:focus { border-color: var(--pri); }
-  .btn { border: 0; border-radius: 12px; padding: 12px 16px; font-size: 16px; font-weight: 600; background: var(--pri); color: #fff; }
-  .btn.ghost { background: var(--pri-soft); color: var(--pri); }
-  .btn.full { width: 100%; margin-top: 8px; }
-  h2 { font-size: 14px; color: var(--sub); margin: 18px 4px 8px; font-weight: 600; }
-  .item {
-    display: flex; align-items: center; gap: 10px; padding: 14px; background: var(--card);
-    border-radius: 14px; margin-bottom: 8px; cursor: pointer;
+  .icon-btn:active { background: var(--fill); }
+  .icon-btn.ghost { visibility: hidden; }
+
+  main { padding: 4px 20px 0; max-width: 560px; margin: 0 auto; }
+  .hero { padding: 6px 2px 18px; }
+  .hero h1 { font-size: 28px; font-weight: 800; margin: 0; line-height: 1.3; letter-spacing: -0.03em; word-break: keep-all; }
+  .hero p { margin: 6px 0 0; color: var(--sub); font-size: 15px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--fill); color: var(--text2); font-size: 12px; font-weight: 600; }
+  .tag.demo { background: #fff4e5; color: #c46a00; }
+
+  /* ---------- 검색 ---------- */
+  .search { display: flex; gap: 8px; margin-bottom: 8px; }
+  .search-box {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 16px;
+    padding: 0 14px; height: 54px; box-shadow: var(--shadow); color: var(--sub);
   }
-  .item .grow { flex: 1; min-width: 0; }
-  .item .name { font-size: 16px; font-weight: 600; }
-  .item .meta { font-size: 13px; color: var(--sub); margin-top: 2px; }
-  .star { background: none; border: 0; font-size: 22px; padding: 4px; color: #f5b301; }
-  .empty { text-align: center; color: var(--sub); padding: 26px 10px; font-size: 14px; line-height: 1.6; }
-  .bus { background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
-  .badge { min-width: 62px; text-align: center; font-weight: 800; font-size: 17px; padding: 8px 6px; border-radius: 10px; color: #fff; background: #2f80ed; }
-  .badge.express { background: var(--red); }
-  .badge.trunk { background: #1e63c8; }
-  .badge.branch { background: var(--green); }
-  .badge.mature { background: #8a5cf6; }
-  .bus .grow { flex: 1; min-width: 0; }
-  .arr { font-size: 18px; font-weight: 700; }
-  .arr.soon { color: var(--red); }
-  .arr.near { color: var(--orange); }
-  .sub { font-size: 13px; color: var(--sub); margin-top: 3px; }
-  .bell { border: 0; background: var(--bg); border-radius: 12px; padding: 10px 12px; font-size: 18px; color: var(--sub); }
-  .bell.on { background: var(--pri-soft); color: var(--pri); font-size: 13px; font-weight: 700; }
-  .status { font-size: 13px; color: var(--sub); text-align: center; margin: 8px 0 12px; }
-  .err { background: #fdecec; color: #b42318; border-radius: 12px; padding: 12px; font-size: 14px; line-height: 1.5; margin-bottom: 12px; white-space: pre-wrap; }
-  .demo-tag { background: var(--orange); color: #fff; font-size: 12px; padding: 3px 8px; border-radius: 6px; margin-left: 6px; vertical-align: 2px; }
-  .help { font-size: 14px; color: var(--sub); line-height: 1.7; }
-  .help b { color: var(--text); }
-  .help a { color: var(--pri); }
-  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; display: none; align-items: flex-end; justify-content: center; }
-  .sheet-bg.show { display: flex; }
-  .sheet { background: var(--card); width: 100%; max-width: 640px; border-radius: 20px 20px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); }
-  .sheet h3 { margin: 0 0 6px; font-size: 18px; }
-  .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0; }
-  .chip { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 12px; padding: 14px 0; font-size: 16px; font-weight: 600; }
-  .alarm-bg { position: fixed; inset: 0; z-index: 60; background: var(--red); color: #fff; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
-  .alarm-bg.show { display: flex; animation: flash 1s infinite alternate; }
-  @keyframes flash { from { background: var(--red); } to { background: #b3121a; } }
-  .alarm-bg .big { font-size: 56px; font-weight: 900; margin: 10px 0; }
-  .alarm-bg .msg { font-size: 22px; font-weight: 700; line-height: 1.5; }
-  .alarm-bg button { margin-top: 30px; background: #fff; color: var(--red); border: 0; border-radius: 14px; padding: 16px 40px; font-size: 18px; font-weight: 800; }
-  .map { height: 280px; border-radius: 14px; overflow: hidden; margin-bottom: 10px; position: relative; z-index: 0; background: var(--line); }
-  .map.small { height: 190px; }
-  .map-hint { font-size: 13px; color: var(--sub); margin: -2px 4px 10px; line-height: 1.5; }
+  .search-box input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 17px; color: var(--text); }
+  .search-box input::placeholder { color: var(--sub); }
+  .square-btn {
+    width: 54px; height: 54px; border: 0; border-radius: 16px; background: var(--card); color: var(--pri);
+    display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); flex: none;
+  }
+  .square-btn:active, .row-item:active, .chip:active, .btn:active { transform: scale(.98); }
+
+  /* ---------- 섹션 / 리스트 ---------- */
+  .section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 26px 4px 10px; }
+  .section-title h2 { font-size: 20px; font-weight: 700; margin: 0; }
+  .section-title span { font-size: 14px; color: var(--sub); }
+  .list { background: var(--card); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); }
+  .row-item {
+    display: flex; align-items: center; gap: 14px; padding: 16px 18px; position: relative; transition: transform .1s, background .1s;
+  }
+  .row-item + .row-item::before { content: ""; position: absolute; top: 0; left: 18px; right: 18px; height: 1px; background: var(--line); }
+  .row-item:active { background: var(--fill); }
+  .row-item .grow { flex: 1; min-width: 0; }
+  .ic {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--pri-soft); color: var(--pri);
+    display: flex; align-items: center; justify-content: center; flex: none; font-weight: 800; font-size: 15px;
+  }
+  .row-title { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-sub { font-size: 14px; color: var(--sub); margin-top: 3px; }
+  .star-btn { width: 40px; height: 40px; border: 0; background: none; color: #d1d6db; display: flex; align-items: center; justify-content: center; margin-right: -8px; }
+  .star-btn.on { color: #ffc342; }
+  .empty { padding: 34px 20px; text-align: center; color: var(--sub); font-size: 15px; line-height: 1.6; }
+  .empty .big { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%; background: var(--fill); display: flex; align-items: center; justify-content: center; color: var(--sub); }
+
+  /* ---------- 버튼 ---------- */
+  .btn { border: 0; border-radius: 14px; height: 52px; padding: 0 18px; font-size: 17px; font-weight: 600; background: var(--pri); color: #fff; transition: transform .1s; }
+  .btn.soft { background: var(--pri-soft); color: var(--pri); }
+  .btn.gray { background: var(--fill); color: var(--text2); }
+  .btn.full { width: 100%; }
+  .btns { display: flex; gap: 8px; }
+  .btns .btn { flex: 1; }
+  .pill-btn { display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 999px; height: 34px; padding: 0 12px 0 10px; background: var(--card); color: var(--text2); font-size: 14px; font-weight: 600; box-shadow: var(--shadow); }
+  .pill-btn.on { color: #e59f00; }
+
+  /* ---------- 지도 ---------- */
+  .map { height: 260px; border-radius: 20px; overflow: hidden; position: relative; z-index: 0; background: var(--fill); box-shadow: var(--shadow); }
+  .map.small { height: 170px; margin-bottom: 14px; }
+  .map-note { font-size: 13px; color: var(--sub); margin: 10px 4px 12px; line-height: 1.5; }
   .pin {
-    background: var(--pri); color: #fff; font-weight: 800; font-size: 12px; border-radius: 50%;
-    width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
-    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4);
+    width: 28px; height: 28px; border-radius: 50%; background: var(--pri); color: #fff; font-weight: 800; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; border: 2.5px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3);
   }
-  .pin.sel { background: var(--red); width: 32px; height: 32px; font-size: 14px; }
-  .me-dot { width: 16px; height: 16px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(26,115,232,.25); }
-  .num { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; border-radius: 50%; background: var(--pri); color: #fff; font-size: 12px; font-weight: 800; margin-right: 6px; vertical-align: 1px; }
-  .leaflet-popup-content { font-size: 14px; margin: 12px 14px; }
-  .leaflet-popup-content b { font-size: 15px; }
-  .pop-btn { display: block; width: 100%; margin-top: 8px; border: 0; border-radius: 10px; padding: 10px; background: #0b5cff; color: #fff; font-weight: 700; font-size: 14px; }
-  .bus-pin { font-size: 22px; line-height: 30px; width: 34px; height: 34px; text-align: center; background: #fff; border-radius: 50%; border: 3px solid var(--orange); box-shadow: 0 2px 6px rgba(0,0,0,.35); }
-  .bus-pin.coming { border-color: var(--red); }
-  .bus { cursor: pointer; }
-  .tap-hint { font-size: 12px; color: var(--pri); margin-top: 3px; }
+  .stop-pin { width: 34px; height: 34px; border-radius: 50%; background: var(--red); color: #fff; display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+  .me-dot { width: 16px; height: 16px; border-radius: 50%; background: #3182f6; border: 3px solid #fff; box-shadow: 0 0 0 7px rgba(49,130,246,.22); }
+  .bus-pin { width: 40px; height: 40px; border-radius: 50%; background: var(--pri); color: #fff; display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,.35); position: relative; }
+  .bus-pin::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 2px solid var(--pri); opacity: .5; animation: pulse 1.6s ease-out infinite; }
+  @keyframes pulse { from { transform: scale(.7); opacity: .7; } to { transform: scale(1.4); opacity: 0; } }
+  .leaflet-container { font-family: inherit; }
+  .leaflet-popup-content-wrapper { border-radius: 14px; }
+  .leaflet-popup-content { font-size: 14px; margin: 12px 14px; line-height: 1.45; }
+  .pop-name { font-size: 15px; font-weight: 700; }
+  .pop-sub { color: #8b95a1; }
+  .pop-btn { display: block; width: 100%; margin-top: 10px; border: 0; border-radius: 10px; height: 38px; background: #3182f6; color: #fff; font-weight: 700; font-size: 14px; }
+
+  /* ---------- 도착 정보 ---------- */
+  .bus-row { padding: 18px 12px 18px 18px; gap: 12px; cursor: pointer; }
+  .route { width: 64px; flex: none; }
+  .route-no { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .route-tp { font-size: 12px; font-weight: 600; margin-top: 2px; }
+  .c-express { color: var(--red); } .c-trunk { color: #2272eb; } .c-branch { color: var(--green); } .c-outer { color: var(--purple); } .c-etc { color: var(--text); }
+  .eta { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .eta.soon { color: var(--red); }
+  .eta.near { color: var(--orange); }
+  .meta { font-size: 14px; color: var(--sub); margin-top: 3px; }
+  .meta .next { color: var(--text2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bell {
+    height: 38px; min-width: 38px; padding: 0 10px; border: 0; border-radius: 12px; background: var(--fill); color: var(--sub);
+    display: flex; align-items: center; justify-content: center; gap: 3px; font-size: 13px; font-weight: 700; flex: none;
+  }
+  .bell.on { background: var(--pri-soft); color: var(--pri); }
+  .chev { color: #c4c9d0; flex: none; }
+  .updated { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--sub); font-size: 13px; margin: 16px 0 4px; }
+  .updated button { border: 0; background: none; color: var(--pri); font-size: 13px; font-weight: 600; padding: 4px; }
+
+  /* ---------- 로딩 스켈레톤 ---------- */
+  .sk { background: linear-gradient(90deg, var(--fill) 25%, var(--line) 50%, var(--fill) 75%); background-size: 200% 100%; animation: sk 1.2s infinite; border-radius: 8px; }
+  @keyframes sk { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  /* ---------- 에러 ---------- */
+  .err { display: flex; gap: 10px; background: var(--red-soft); color: var(--red); border-radius: 16px; padding: 14px 16px; font-size: 14px; line-height: 1.55; margin-bottom: 12px; white-space: pre-wrap; }
+  .err svg { flex: none; margin-top: 1px; }
+
+  /* ---------- 버스 추적 화면 ---------- */
+  #busView { position: fixed; inset: 0; z-index: 5; background: var(--bg); }
+  #busMap { position: absolute; inset: 0; z-index: 0; }
+  .map-fabs { position: absolute; right: 14px; top: calc(var(--top) + 10px); z-index: 10; display: flex; flex-direction: column; gap: 8px; }
+  .fab { width: 46px; height: 46px; border-radius: 14px; border: 0; background: var(--card); color: var(--text); box-shadow: 0 2px 10px rgba(0,0,0,.15); display: flex; align-items: center; justify-content: center; }
+  .bus-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--card);
+    border-radius: 24px 24px 0 0; padding: 10px 22px calc(env(safe-area-inset-bottom) + 20px);
+    box-shadow: 0 -4px 24px rgba(0,0,0,.12); max-width: 560px; margin: 0 auto;
+  }
+  .grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 14px; }
+  .bs-top { display: flex; align-items: center; gap: 10px; }
+  .route-chip { height: 30px; padding: 0 12px; border-radius: 9px; color: #fff; font-weight: 800; font-size: 16px; display: inline-flex; align-items: center; background: #2272eb; }
+  .route-chip.c-express { background: var(--red); color: #fff; } .route-chip.c-branch { background: var(--green); color: #fff; } .route-chip.c-outer { background: var(--purple); color: #fff; } .route-chip.c-etc { background: #4e5968; color: #fff; }
+  .bs-dest { font-size: 15px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bs-eta { font-size: 34px; font-weight: 800; margin: 12px 0 4px; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .bs-eta.soon { color: var(--red); }
+  .bs-sub { font-size: 15px; color: var(--text2); line-height: 1.5; }
+  .stops-bar { display: flex; gap: 4px; margin: 16px 0 6px; }
+  .stops-bar i { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+  .stops-bar i.done { background: var(--pri); }
+  .stops-bar i.bus { background: var(--pri); box-shadow: 0 0 0 3px var(--pri-soft); }
+  .bs-foot { display: flex; justify-content: space-between; font-size: 13px; color: var(--sub); margin-top: 8px; }
+
+  /* ---------- 바텀시트 (알림 시간) ---------- */
+  .dim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 50; display: flex; align-items: flex-end; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .dim.show { opacity: 1; pointer-events: auto; }
+  .sheet { background: var(--card); width: 100%; max-width: 560px; border-radius: 24px 24px 0 0; padding: 10px 22px calc(env(safe-area-inset-bottom) + 20px); transform: translateY(30px); transition: transform .25s; }
+  .dim.show .sheet { transform: none; }
+  .sheet h3 { margin: 4px 0 4px; font-size: 22px; font-weight: 700; }
+  .sheet p { margin: 0; color: var(--sub); font-size: 15px; }
+  .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 20px 0; }
+  .chip { height: 52px; border: 0; border-radius: 14px; background: var(--fill); color: var(--text); font-size: 17px; font-weight: 600; transition: transform .1s; }
+  .chip.on { background: var(--pri); color: #fff; }
+
+  /* ---------- 알림 화면 ---------- */
+  .alarm { position: fixed; inset: 0; z-index: 60; background: var(--pri); color: #fff; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+  .alarm.show { display: flex; }
+  .alarm .ring { width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; animation: ring 1s ease-in-out infinite; }
+  @keyframes ring { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  .alarm .r-no { font-size: 52px; font-weight: 800; margin: 26px 0 6px; letter-spacing: -0.03em; }
+  .alarm .r-msg { font-size: 22px; font-weight: 600; line-height: 1.5; white-space: pre-line; opacity: .95; }
+  .alarm button { margin-top: 40px; width: min(320px, 100%); height: 56px; border: 0; border-radius: 16px; background: #fff; color: var(--pri); font-size: 18px; font-weight: 700; }
+
+  /* ---------- 설정 ---------- */
+  .field { width: 100%; height: 54px; border: 0; border-radius: 14px; padding: 0 16px; background: var(--fill); color: var(--text); font: inherit; font-size: 16px; outline: none; margin: 12px 0; }
+  .card { background: var(--card); border-radius: 20px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  .card h3 { margin: 0; font-size: 17px; font-weight: 700; }
+  .card .desc { color: var(--sub); font-size: 14px; margin-top: 4px; line-height: 1.5; }
+  .steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  .steps li { counter-increment: s; position: relative; padding: 0 0 14px 34px; font-size: 15px; line-height: 1.55; color: var(--text2); }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--pri-soft); color: var(--pri); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .steps b { color: var(--text); }
+  .steps a { color: var(--pri); text-decoration: none; font-weight: 600; }
+  .note { font-size: 13px; color: var(--sub); line-height: 1.6; }
+  .switch-row { display: flex; align-items: center; justify-content: space-between; }
+  .switch { width: 51px; height: 31px; border-radius: 16px; background: var(--line); border: 0; position: relative; transition: background .2s; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); transition: transform .2s; }
+  .switch.on { background: var(--green); }
+  .switch.on::after { transform: translateX(20px); }
+
+  .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translate(-50%, 20px); background: rgba(25,31,40,.92); color: #fff; padding: 12px 18px; border-radius: 14px; font-size: 15px; font-weight: 500; z-index: 70; opacity: 0; transition: .25s; pointer-events: none; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
   .hidden { display: none !important; }
-  .spin { display: inline-block; animation: rot 1s linear infinite; }
-  @keyframes rot { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 
-<header>
-  <button id="backBtn" class="hidden" aria-label="뒤로">←</button>
-  <h1 id="title">🚌 대전 버스 알림</h1>
-  <button id="settingsBtn" aria-label="설정">⚙️</button>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></g></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></g></symbol>
+    <symbol id="i-locate" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" fill="currentColor"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.7 6.3.9-4.55 4.43 1.07 6.27L12 17.1l-5.62 2.96 1.07-6.27L2.9 9.4l6.3-.9z" fill="currentColor"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></g></symbol>
+    <symbol id="i-bell-fill" viewBox="0 0 24 24"><path d="M12 2a6 6 0 0 0-6 6c0 6.2-2.6 8.1-2.7 8.2A1 1 0 0 0 3.9 18h16.2a1 1 0 0 0 .6-1.8S18 14.2 18 8a6 6 0 0 0-6-6zm-2.6 18a2.8 2.8 0 0 0 5.2 0z" fill="currentColor"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bus" viewBox="0 0 24 24"><path d="M6 3h12a3 3 0 0 1 3 3v11a2 2 0 0 1-1 1.73V20a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H7v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1.27A2 2 0 0 1 3 17V6a3 3 0 0 1 3-3zm0 3.5V11h12V6.5zM7.5 16a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5zm9 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5z" fill="currentColor"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><path d="M11 22V12H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-4v10z" fill="currentColor"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></g></symbol>
+    <symbol id="i-both" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></g></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 7.5v5.5M12 16.5v.01"/></g></symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <button class="icon-btn ghost" id="backBtn" aria-label="뒤로"><svg width="26" height="26"><use href="#i-back"/></svg></button>
+  <div class="t" id="topTitle"></div>
+  <button class="icon-btn" id="settingsBtn" aria-label="설정"><svg width="24" height="24"><use href="#i-gear"/></svg></button>
 </header>
 
 <main>
-  <!-- 홈 -->
+  <!-- ===== 홈 ===== -->
   <section id="homeView">
+    <div class="hero">
+      <h1>어디서 버스<br>타세요?</h1>
+      <p id="homeSub">대전 시내버스 실시간 도착 정보</p>
+    </div>
+
     <div id="keyWarn" class="card hidden">
-      <div class="help">
-        <b>인증키가 아직 없어요.</b><br>
-        ⚙️ 설정에서 공공데이터포털 인증키를 넣거나, 체험 모드로 화면을 먼저 둘러보세요.
-      </div>
-      <div class="row" style="margin-top:10px">
-        <button class="btn" style="flex:1" onclick="showView('settings')">인증키 넣기</button>
-        <button class="btn ghost" style="flex:1" onclick="enableDemo()">체험 모드</button>
+      <h3>인증키를 먼저 넣어주세요</h3>
+      <div class="desc">공공데이터포털 인증키가 있어야 실제 버스 정보를 볼 수 있어요. 키가 없으면 체험 모드로 둘러볼 수 있어요.</div>
+      <div class="btns" style="margin-top:16px">
+        <button class="btn" onclick="showView('settings')">인증키 넣기</button>
+        <button class="btn soft" onclick="enableDemo()">체험 모드</button>
       </div>
     </div>
 
-    <div class="card">
-      <form id="searchForm" class="row">
-        <input id="searchInput" type="search" placeholder="정류장 이름 또는 번호 (예: 대전역)" autocomplete="off" enterkeyhint="search">
-        <button class="btn" type="submit">검색</button>
-      </form>
-      <button id="nearBtn" class="btn ghost full" type="button">📍 내 주변 정류장</button>
-    </div>
+    <form id="searchForm" class="search">
+      <label class="search-box">
+        <svg width="22" height="22"><use href="#i-search"/></svg>
+        <input id="searchInput" type="search" placeholder="정류장 이름 또는 번호" autocomplete="off" enterkeyhint="search">
+      </label>
+      <button class="square-btn" id="nearBtn" type="button" aria-label="내 주변 정류장"><svg width="24" height="24"><use href="#i-locate"/></svg></button>
+    </form>
 
     <div id="searchArea"></div>
 
-    <h2>⭐ 즐겨찾기</h2>
+    <div class="section-title"><h2>즐겨찾기</h2><span id="favCount"></span></div>
     <div id="favList"></div>
   </section>
 
-  <!-- 정류장 도착정보 -->
+  <!-- ===== 정류장 ===== -->
   <section id="stopView" class="hidden">
+    <div class="hero" style="padding-bottom:14px">
+      <h1 id="stopName"></h1>
+      <p><span id="stopNo"></span><button class="pill-btn" id="favBtn" style="margin-left:auto"><svg width="18" height="18"><use href="#i-star"/></svg><span></span></button></p>
+    </div>
     <div id="stopMap" class="map small hidden"></div>
-    <div id="stopStatus" class="status"></div>
     <div id="arrList"></div>
+    <div class="updated" id="stopStatus"></div>
   </section>
 
-  <!-- 버스 실시간 위치 -->
-  <section id="busView" class="hidden">
-    <div id="busMap" class="map" style="height:58vh"></div>
-    <div class="row" style="margin-bottom:10px">
-      <button class="btn ghost" style="flex:1;padding:10px 6px" id="fitBusBtn">🚌 버스</button>
-      <button class="btn ghost" style="flex:1;padding:10px 6px" id="fitStopBtn">🚏 정류장</button>
-      <button class="btn ghost" style="flex:1;padding:10px 6px" id="fitBothBtn">↔ 둘 다</button>
-    </div>
-    <div id="busInfo"></div>
-    <div id="busStatus" class="status"></div>
-  </section>
-
-  <!-- 설정 -->
+  <!-- ===== 설정 ===== -->
   <section id="settingsView" class="hidden">
+    <div class="hero"><h1>설정</h1></div>
     <div class="card">
-      <div class="help" style="margin-bottom:10px"><b>공공데이터포털 인증키</b> (Decoding 키 권장)</div>
-      <input id="keyInput" type="text" placeholder="인증키 붙여넣기" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <button id="saveKeyBtn" class="btn full">저장</button>
-      <div class="row" style="margin-top:8px">
-        <button id="demoToggle" class="btn ghost" style="flex:1"></button>
-      </div>
+      <h3>공공데이터포털 인증키</h3>
+      <div class="desc">마이페이지의 Decoding 키를 붙여넣어 주세요. 키는 이 폰에만 저장돼요.</div>
+      <input id="keyInput" class="field" type="text" placeholder="인증키 붙여넣기" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button id="saveKeyBtn" class="btn full">저장하기</button>
     </div>
-    <div class="card help">
-      <b>인증키 받는 법</b><br>
-      1. <a href="https://www.data.go.kr" target="_blank" rel="noopener">data.go.kr</a> 가입 후 로그인<br>
-      2. <b>국토교통부_(TAGO)_버스도착정보</b> 검색 → 활용신청<br>
-      3. <b>국토교통부_(TAGO)_버스정류소정보</b>도 똑같이 활용신청<br>
-      &nbsp;&nbsp;&nbsp;(버스 위치 지도용) <b>버스위치정보</b>, <b>버스노선정보</b>도 신청<br>
-      4. 마이페이지 → 개발계정 → <b>일반 인증키(Decoding)</b> 복사<br>
-      5. 위 칸에 붙여넣고 저장<br><br>
-      ※ 신청 직후에는 키가 활성화되기까지 1시간 정도 걸릴 수 있어요.<br>
-      ※ 알림은 이 화면을 켜 둔 동안에만 울려요. (소리·진동·화면 표시)
+    <div class="card switch-row">
+      <div><h3>체험 모드</h3><div class="desc">가짜 데이터로 화면을 둘러봐요</div></div>
+      <button class="switch" id="demoSwitch" aria-label="체험 모드"></button>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:16px">인증키 받는 법</h3>
+      <ol class="steps">
+        <li><a href="https://www.data.go.kr" target="_blank" rel="noopener">data.go.kr</a> 가입 후 로그인</li>
+        <li>아래 4개를 검색해서 각각 <b>활용신청</b><br><b>국토교통부_(TAGO)_</b> 버스도착정보 · 버스정류소정보 · 버스위치정보 · 버스노선정보</li>
+        <li>마이페이지 → 개발계정에서 <b>일반 인증키(Decoding)</b> 복사</li>
+        <li>위 칸에 붙여넣고 저장</li>
+      </ol>
+      <div class="note">신청 직후엔 키가 활성화되기까지 1시간쯤 걸릴 수 있어요.<br>알림은 이 앱을 켜 둔 동안에만 울려요.</div>
     </div>
   </section>
 </main>
 
-<!-- 알림 시간 선택 시트 -->
-<div id="sheetBg" class="sheet-bg">
+<!-- ===== 버스 추적 (전체 화면 지도) ===== -->
+<section id="busView" class="hidden">
+  <div id="busMap"></div>
+  <div class="map-fabs">
+    <button class="fab" id="fitBusBtn" aria-label="버스 위치"><svg width="22" height="22"><use href="#i-bus"/></svg></button>
+    <button class="fab" id="fitStopBtn" aria-label="정류장 위치"><svg width="22" height="22"><use href="#i-stop"/></svg></button>
+    <button class="fab" id="fitBothBtn" aria-label="둘 다 보기"><svg width="22" height="22"><use href="#i-both"/></svg></button>
+  </div>
+  <div class="bus-sheet">
+    <div class="grabber"></div>
+    <div id="busInfo"></div>
+  </div>
+</section>
+
+<!-- 알림 시간 선택 -->
+<div id="sheetBg" class="dim">
   <div class="sheet">
+    <div class="grabber"></div>
     <h3 id="sheetTitle"></h3>
-    <div class="sub">버스가 이 시간 안으로 들어오면 알려드려요</div>
+    <p>버스가 이 시간 안으로 들어오면 알려드려요</p>
     <div class="chips" id="chips"></div>
-    <button id="sheetOff" class="btn ghost full">알림 끄기</button>
-    <button id="sheetClose" class="btn full" style="background:var(--line);color:var(--text)">닫기</button>
+    <div class="btns">
+      <button id="sheetOff" class="btn gray">알림 끄기</button>
+      <button id="sheetClose" class="btn soft">닫기</button>
+    </div>
   </div>
 </div>
 
 <!-- 알림 화면 -->
-<div id="alarmBg" class="alarm-bg">
-  <div style="font-size:60px">🚌</div>
-  <div class="big" id="alarmRoute"></div>
-  <div class="msg" id="alarmMsg"></div>
+<div id="alarmBg" class="alarm">
+  <div class="ring"><svg width="60" height="60"><use href="#i-bus"/></svg></div>
+  <div class="r-no" id="alarmRoute"></div>
+  <div class="r-msg" id="alarmMsg"></div>
   <button id="alarmStop">확인</button>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 /* ===================== 설정 ===================== */
 const CITY = "25"; // 대전광역시 (TAGO 도시코드)
 const API = "https://apis.data.go.kr/1613000";
 const REFRESH_SEC = 30;
+const BUS_REFRESH_SEC = 15;
 
 /* ===================== 저장소 ===================== */
 const store = {
@@ -219,93 +369,100 @@ const store = {
 };
 let serviceKey = store.get("key", "");
 let demo = store.get("demo", false);
-let favs = store.get("favs", []);      // [{id, name, no}]
+let favs = store.get("favs", []);      // [{id, name, no, lat, lng}]
 let alarms = store.get("alarms", {});  // { "nodeId|routeId": minutes }
 
-/* ===================== 화면 전환 ===================== */
+/* ===================== 공통 ===================== */
 const $ = id => document.getElementById(id);
+const icon = (name, size = 20) => `<svg width="${size}" height="${size}"><use href="#i-${name}"/></svg>`;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let toastTimer;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+function errBox(err) {
+  return `<div class="err">${icon("alert", 20)}<div>${esc(err.message)}</div></div>`;
+}
+function skeleton(n, h = 72) {
+  return `<div class="list">${Array.from({ length: n }, () =>
+    `<div class="row-item"><div class="sk" style="width:42px;height:42px;border-radius:50%"></div>
+     <div class="grow"><div class="sk" style="width:55%;height:17px"></div><div class="sk" style="width:35%;height:13px;margin-top:8px"></div></div></div>`).join("")}</div>`;
+}
+
+/* ===================== 화면 전환 ===================== */
 let currentStop = null;
-let arrivals = [];       // 마지막 조회 결과
+let arrivals = [];
 let fetchedAt = 0;
 let refreshTimer = null, tickTimer = null;
-const fired = new Set(); // 이미 울린 알림 (버스 회차별)
-
+const fired = new Set();
 let currentView = "home";
+
 function showView(name) {
   currentView = name;
   ["homeView", "stopView", "busView", "settingsView"].forEach(v => $(v).classList.add("hidden"));
   $(name + "View").classList.remove("hidden");
-  $("backBtn").classList.toggle("hidden", name === "home");
-  $("settingsBtn").classList.toggle("hidden", name === "settings");
-  // 버스 지도 보는 동안에도 도착 알림은 계속 동작
-  if (name !== "stop" && name !== "bus") stopTimers();
+  $("backBtn").classList.toggle("ghost", name === "home");
+  $("settingsBtn").classList.toggle("ghost", name === "settings" || name === "bus");
+  $("topTitle").textContent = name === "stop" ? (currentStop?.name || "") : name === "bus" ? "" : "";
+  $("topTitle").classList.remove("show");
+  if (name !== "stop" && name !== "bus") stopTimers();   // 지도 보는 동안에도 도착 알림은 계속
   if (name !== "bus") stopBusTimer();
   if (name === "stop" && stopMapObj) setTimeout(() => stopMapObj && stopMapObj.invalidateSize(), 50);
-  if (name === "home") { $("title").innerHTML = "🚌 대전 버스 알림" + (demo ? '<span class="demo-tag">체험</span>' : ""); renderHome(); }
-  if (name === "settings") { $("title").textContent = "설정"; $("keyInput").value = serviceKey; renderDemoToggle(); }
-  window.scrollTo(0, 0);
+  if (name === "home") renderHome();
+  if (name === "settings") { $("keyInput").value = serviceKey; renderDemoSwitch(); }
+  if (name !== "bus") window.scrollTo(0, 0);
 }
-$("backBtn").onclick = () => {
-  if (currentView === "bus") { showView("stop"); $("title").textContent = currentStop.name; }
-  else showView("home");
-};
+$("backBtn").onclick = () => currentView === "bus" ? showView("stop") : showView("home");
 $("settingsBtn").onclick = () => showView("settings");
 
+// 스크롤하면 상단에 작은 제목 표시
+window.addEventListener("scroll", () => {
+  $("topTitle").classList.toggle("show", currentView === "stop" && window.scrollY > 60);
+}, { passive: true });
+
 /* ===================== API ===================== */
-function keyParam() {
-  // 인코딩 키(%가 들어간 키)를 넣었으면 그대로, 디코딩 키면 인코딩해서 사용
-  return serviceKey.includes("%") ? serviceKey : encodeURIComponent(serviceKey);
-}
+function keyParam() { return serviceKey.includes("%") ? serviceKey : encodeURIComponent(serviceKey); }
 
 async function callApi(path, params) {
   const qs = Object.entries({ _type: "json", numOfRows: 100, pageNo: 1, ...params })
     .map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&");
   const url = `${API}/${path}?serviceKey=${keyParam()}&${qs}`;
   let res;
-  try {
-    res = await fetch(url);
-  } catch (e) {
-    throw new Error("서버에 연결하지 못했어요.\n인터넷 연결을 확인하거나, 브라우저가 이 요청을 막았을 수 있어요. (" + e.message + ")");
-  }
+  try { res = await fetch(url); }
+  catch (e) { throw new Error("서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.\n(" + e.message + ")"); }
   const text = await res.text();
-
-  // 인증키 오류 등은 JSON 요청이어도 XML로 옴
   if (text.trim().startsWith("<")) {
     const doc = new DOMParser().parseFromString(text, "text/xml");
     const msg = doc.querySelector("returnAuthMsg, errMsg, resultMsg")?.textContent || "알 수 없는 오류";
-    if (/SERVICE_KEY|NOT_REGISTERED|KEY/i.test(msg)) throw new Error("인증키 오류: " + msg + "\n키가 맞는지, 두 API 모두 활용신청했는지 확인하세요. 신청 직후라면 1시간쯤 기다려 보세요.");
+    if (/SERVICE_KEY|NOT_REGISTERED|KEY/i.test(msg)) throw new Error("인증키 오류예요 (" + msg + ")\n키가 맞는지, API를 활용신청했는지 확인해 주세요. 신청 직후라면 1시간쯤 기다려 보세요.");
     throw new Error("API 오류: " + msg);
   }
   let data;
   try { data = JSON.parse(text); } catch { throw new Error("응답을 읽지 못했어요: " + text.slice(0, 120)); }
-
   const header = data?.response?.header;
   if (header && header.resultCode && header.resultCode !== "00") throw new Error("API 오류: " + header.resultMsg);
-
-  // 결과 0개면 items가 "", 1개면 item이 객체
   const items = data?.response?.body?.items;
   if (!items || typeof items !== "object" || !items.item) return [];
   return Array.isArray(items.item) ? items.item : [items.item];
 }
 
+function toStop(i) {
+  return { id: i.nodeid, name: i.nodenm, no: String(i.nodeno ?? ""), lat: Number(i.gpslati) || null, lng: Number(i.gpslong) || null };
+}
 async function searchStops(keyword) {
-  if (demo) return DEMO.stops.filter(s => s.name.includes(keyword) || s.no.includes(keyword) || keyword.length < 1);
+  if (demo) return DEMO.stops.filter(s => s.name.includes(keyword) || s.no.includes(keyword));
   const isNum = /^\d+$/.test(keyword);
   const list = await callApi("BusSttnInfoInqireService/getSttnNoList",
     isNum ? { cityCode: CITY, nodeNo: keyword } : { cityCode: CITY, nodeNm: keyword });
   return list.map(toStop);
 }
-
-function toStop(i) {
-  return { id: i.nodeid, name: i.nodenm, no: String(i.nodeno ?? ""), lat: Number(i.gpslati) || null, lng: Number(i.gpslong) || null };
-}
-
 async function nearStops(lat, lng) {
   if (demo) return DEMO.stops;
   const list = await callApi("BusSttnInfoInqireService/getCrdntPrxmtSttnList", { gpsLati: lat, gpsLong: lng });
   return list.filter(i => String(i.citycode) === CITY || !i.citycode).map(toStop);
 }
-
 async function getArrivals(nodeId) {
   if (demo) return DEMO.arrivals();
   const list = await callApi("ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList", { cityCode: CITY, nodeId });
@@ -314,277 +471,12 @@ async function getArrivals(nodeId) {
     sec: Number(i.arrtime) || 0, prev: Number(i.arrprevstationcnt) || 0, vehicleTp: i.vehicletp || ""
   }));
 }
-
-/* ===================== 홈 ===================== */
-function renderHome() {
-  $("keyWarn").classList.toggle("hidden", !!serviceKey || demo);
-  const box = $("favList");
-  if (!favs.length) {
-    box.innerHTML = `<div class="empty">아직 즐겨찾기가 없어요.<br>정류장을 검색하고 ☆를 눌러 추가하세요.</div>`;
-    return;
-  }
-  box.innerHTML = "";
-  favs.forEach(s => box.appendChild(stopItem(s)));
-}
-
-function stopItem(s, num) {
-  const el = document.createElement("div");
-  el.className = "item";
-  const isFav = favs.some(f => f.id === s.id);
-  el.innerHTML = `<div class="grow"><div class="name">${num ? `<span class="num">${num}</span>` : ""}<span></span></div><div class="meta"></div></div>
-                  <button class="star" aria-label="즐겨찾기">${isFav ? "★" : "☆"}</button>`;
-  el.querySelector(".name span:last-child").textContent = s.name;
-  el.querySelector(".meta").textContent = s.no ? "정류장 번호 " + s.no : s.id;
-  el.querySelector(".star").onclick = e => { e.stopPropagation(); toggleFav(s); e.target.textContent = favs.some(f => f.id === s.id) ? "★" : "☆"; if (!$("homeView").classList.contains("hidden")) renderHome(); };
-  el.onclick = () => openStop(s);
-  return el;
-}
-
-function toggleFav(s) {
-  if (favs.some(f => f.id === s.id)) favs = favs.filter(f => f.id !== s.id);
-  else favs.push({ id: s.id, name: s.name, no: s.no, lat: s.lat, lng: s.lng });
-  store.set("favs", favs);
-}
-
-function needKey() {
-  if (serviceKey || demo) return false;
-  $("searchArea").innerHTML = `<div class="err">먼저 ⚙️ 설정에서 인증키를 넣거나 체험 모드를 켜 주세요.</div>`;
-  return true;
-}
-
-function showResults(title, list, myPos) {
-  const area = $("searchArea");
-  area.innerHTML = `<h2></h2>`;
-  area.querySelector("h2").textContent = title;
-  if (!list.length) { area.innerHTML += `<div class="empty">결과가 없어요.</div>`; return; }
-  list = list.slice(0, 40);
-
-  const withPos = list.filter(s => s.lat && s.lng);
-  if (withPos.length && window.L) {
-    const mapEl = document.createElement("div");
-    mapEl.className = "map";
-    area.appendChild(mapEl);
-    const hint = document.createElement("div");
-    hint.className = "map-hint";
-    hint.textContent = "같은 이름 정류장은 길 건너편일 수 있어요. 번호 핀을 눌러 위치를 확인하세요.";
-    area.appendChild(hint);
-    drawResultMap(mapEl, list, myPos);
-  }
-  list.forEach((s, idx) => area.appendChild(stopItem(s, s.lat ? idx + 1 : null)));
-}
-
-/* ===================== 지도 ===================== */
-let resultMap = null, stopMapObj = null;
-let myPosCache = null;
-
-function tiles(map) {
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19, attribution: "© OpenStreetMap"
-  }).addTo(map);
-}
-function numIcon(n, sel) {
-  return L.divIcon({ className: "", html: `<div class="pin ${sel ? "sel" : ""}">${n}</div>`, iconSize: [sel ? 32 : 26, sel ? 32 : 26], iconAnchor: [sel ? 16 : 13, sel ? 16 : 13] });
-}
-function meMarker(map, pos) {
-  if (!pos) return;
-  L.marker([pos.lat, pos.lng], { icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false }).addTo(map);
-}
-
-function drawResultMap(el, list, myPos) {
-  if (resultMap) { resultMap.remove(); resultMap = null; }
-  resultMap = L.map(el, { zoomControl: true, attributionControl: true });
-  tiles(resultMap);
-  const pts = [];
-  list.forEach((s, idx) => {
-    if (!s.lat || !s.lng) return;
-    pts.push([s.lat, s.lng]);
-    const m = L.marker([s.lat, s.lng], { icon: numIcon(idx + 1) }).addTo(resultMap);
-    const box = document.createElement("div");
-    box.innerHTML = `<b></b><div style="color:#666;margin-top:2px"></div><button class="pop-btn">도착정보 보기</button>`;
-    box.querySelector("b").textContent = `${idx + 1}. ${s.name}`;
-    box.querySelector("div").textContent = s.no ? "정류장 번호 " + s.no : "";
-    box.querySelector("button").onclick = () => openStop(s);
-    m.bindPopup(box);
-  });
-  const me = myPos || myPosCache;
-  if (me) { meMarker(resultMap, me); pts.push([me.lat, me.lng]); }
-  if (pts.length === 1) resultMap.setView(pts[0], 17);
-  else resultMap.fitBounds(pts, { padding: [30, 30], maxZoom: 17 });
-  setTimeout(() => resultMap && resultMap.invalidateSize(), 50);
-}
-
-function drawStopMap(s) {
-  const el = $("stopMap");
-  if (stopMapObj) { stopMapObj.remove(); stopMapObj = null; }
-  if (!s.lat || !s.lng || !window.L) { el.classList.add("hidden"); return; }
-  el.classList.remove("hidden");
-  stopMapObj = L.map(el, { zoomControl: false });
-  tiles(stopMapObj);
-  L.marker([s.lat, s.lng], { icon: numIcon("🚏", true) }).addTo(stopMapObj);
-  stopMapObj.setView([s.lat, s.lng], 18);
-  if (myPosCache) meMarker(stopMapObj, myPosCache);
-  setTimeout(() => stopMapObj && stopMapObj.invalidateSize(), 50);
-}
-
-// 내 위치를 조용히 한 번 가져와 둠 (권한 있으면 지도에 파란 점 표시)
-function warmMyPos() {
-  if (!navigator.geolocation || demo) return;
-  navigator.geolocation.getCurrentPosition(p => { myPosCache = { lat: p.coords.latitude, lng: p.coords.longitude }; }, () => {}, { timeout: 8000, maximumAge: 60000 });
-}
-
-$("searchForm").onsubmit = async e => {
-  e.preventDefault();
-  const q = $("searchInput").value.trim();
-  if (!q || needKey()) return;
-  $("searchInput").blur();
-  $("searchArea").innerHTML = `<div class="status"><span class="spin">⏳</span> 검색 중…</div>`;
-  try { showResults(`"${q}" 검색 결과`, await searchStops(q)); }
-  catch (err) { $("searchArea").innerHTML = ""; showErr($("searchArea"), err); }
-};
-
-$("nearBtn").onclick = () => {
-  if (needKey()) return;
-  if (demo) { showResults("내 주변 정류장 (체험)", DEMO.stops); return; }
-  if (!navigator.geolocation) { showErr($("searchArea"), new Error("이 브라우저는 위치 기능을 지원하지 않아요.")); return; }
-  $("searchArea").innerHTML = `<div class="status"><span class="spin">⏳</span> 위치 확인 중…</div>`;
-  navigator.geolocation.getCurrentPosition(async pos => {
-    myPosCache = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    try { showResults("내 주변 정류장", await nearStops(myPosCache.lat, myPosCache.lng), myPosCache); }
-    catch (err) { $("searchArea").innerHTML = ""; showErr($("searchArea"), err); }
-  }, err => {
-    $("searchArea").innerHTML = "";
-    showErr($("searchArea"), new Error("위치를 가져오지 못했어요. 위치 권한을 허용했는지 확인하세요. (" + err.message + ")"));
-  }, { enableHighAccuracy: true, timeout: 10000 });
-};
-
-function showErr(box, err) {
-  const d = document.createElement("div");
-  d.className = "err"; d.textContent = err.message;
-  box.prepend(d);
-}
-
-/* ===================== 정류장 도착정보 ===================== */
-function openStop(s) {
-  currentStop = s;
-  arrivals = []; fetchedAt = 0;
-  $("title").textContent = s.name;
-  $("arrList").innerHTML = "";
-  showView("stop");
-  drawStopMap(s);
-  refresh();
-  refreshTimer = setInterval(refresh, REFRESH_SEC * 1000);
-  tickTimer = setInterval(tick, 1000);
-}
-
-function stopTimers() { clearInterval(refreshTimer); clearInterval(tickTimer); refreshTimer = tickTimer = null; }
-
-async function refresh() {
-  if (!currentStop) return;
-  $("stopStatus").innerHTML = `<span class="spin">⏳</span> 불러오는 중…`;
-  try {
-    arrivals = await getArrivals(currentStop.id);
-    fetchedAt = Date.now();
-    renderArrivals();
-  } catch (err) {
-    $("stopStatus").textContent = "";
-    $("arrList").innerHTML = "";
-    showErr($("arrList"), err);
-  }
-}
-
-function remain(a) { return Math.max(0, Math.round(a.sec - (Date.now() - fetchedAt) / 1000)); }
-
-function fmt(sec) {
-  if (sec < 60) return "곧 도착";
-  const m = Math.floor(sec / 60), s = sec % 60;
-  return `${m}분 ${String(s).padStart(2, "0")}초`;
-}
-
-function badgeClass(tp) {
-  if (/급행/.test(tp)) return "express";
-  if (/간선/.test(tp)) return "trunk";
-  if (/지선/.test(tp)) return "branch";
-  if (/외곽|마을/.test(tp)) return "mature";
-  return "";
-}
-
-// 같은 노선끼리 묶어서 첫번째/두번째 버스 표시
-function grouped() {
-  const map = new Map();
-  arrivals.forEach(a => {
-    if (!map.has(a.routeId)) map.set(a.routeId, []);
-    map.get(a.routeId).push(a);
-  });
-  return [...map.values()].map(g => g.sort((x, y) => x.sec - y.sec))
-    .sort((x, y) => x[0].sec - y[0].sec);
-}
-
-function renderArrivals() {
-  const box = $("arrList");
-  const groups = grouped();
-  const isFav = favs.some(f => f.id === currentStop.id);
-  box.innerHTML = `<button class="btn ghost full" id="favBtn" style="margin:0 0 12px">${isFav ? "★ 즐겨찾기 해제" : "☆ 즐겨찾기 추가"}</button>`;
-  $("favBtn").onclick = () => { toggleFav(currentStop); renderArrivals(); };
-
-  if (!groups.length) {
-    box.innerHTML += `<div class="empty">지금 도착 예정인 버스가 없어요.<br>(운행 시간이 아니거나 정보가 없는 정류장일 수 있어요)</div>`;
-  }
-  groups.forEach(g => {
-    const a = g[0], key = currentStop.id + "|" + a.routeId, on = alarms[key];
-    const el = document.createElement("div");
-    el.className = "bus";
-    el.innerHTML = `
-      <div class="badge ${badgeClass(a.routeTp)}"></div>
-      <div class="grow">
-        <div class="arr" data-r="${a.routeId}" data-i="0"></div>
-        <div class="sub"></div>
-        ${g[1] ? `<div class="sub next-bus">다음 버스 <span data-r="${a.routeId}" data-i="1"></span> 🗺️</div>` : ""}
-        <div class="tap-hint">눌러서 이 버스 위치 보기 🗺️</div>
-      </div>
-      <button class="bell ${on ? "on" : ""}">${on ? "🔔 " + on + "분" : "🔕"}</button>`;
-    el.querySelector(".badge").textContent = a.routeNo;
-    el.querySelector(".sub").textContent = `${a.prev}정거장 전` + (a.routeTp ? " · " + a.routeTp : "") + (/저상/.test(a.vehicleTp) ? " · 저상" : "");
-    el.querySelector(".bell").onclick = e => { e.stopPropagation(); openSheet(a); };
-    el.onclick = () => openBus(a);
-    const nb = el.querySelector(".next-bus");
-    if (nb) nb.onclick = e => { e.stopPropagation(); openBus(g[1]); };
-    box.appendChild(el);
-  });
-  tick();
-}
-
-function tick() {
-  if (!fetchedAt) return;
-  const sinceSec = Math.round((Date.now() - fetchedAt) / 1000);
-  $("stopStatus").textContent = `${sinceSec}초 전 업데이트 · ${REFRESH_SEC}초마다 자동 갱신 · 아래로 당기면 새로고침`;
-  const groups = grouped();
-  groups.forEach(g => {
-    g.slice(0, 2).forEach((a, i) => {
-      const el = document.querySelector(`[data-r="${CSS.escape(a.routeId)}"][data-i="${i}"]`);
-      if (!el) return;
-      const r = remain(a);
-      el.textContent = fmt(r);
-      if (i === 0) el.className = "arr" + (r < 120 ? " soon" : r < 300 ? " near" : "");
-    });
-    checkAlarm(g[0]);
-  });
-}
-
-/* ===================== 고른 버스 한 대 실시간 추적 ===================== */
-const BUS_REFRESH_SEC = 15;
-let busMapObj = null, busMarker = null, busLine = null, busTimer = null;
-let track = null;
-// track = { routeId, routeNo, startPrev, startSec, routeStops, myOrds, vehicleNo, bus, arr, firstFit }
-
-function stopBusTimer() { clearInterval(busTimer); busTimer = null; }
-
 async function getRouteStops(routeId) {
   if (demo) return DEMO.routeStops(currentStop);
   const list = await callApi("BusRouteInfoInqireService/getRouteAcctoThrghSttnList", { cityCode: CITY, routeId, numOfRows: 500 });
   return list.map(i => ({ id: String(i.nodeid), name: i.nodenm, ord: Number(i.nodeord), lat: Number(i.gpslati) || null, lng: Number(i.gpslong) || null }))
     .sort((x, y) => x.ord - y.ord);
 }
-
 async function getBusLocations(routeId) {
   if (demo) return DEMO.vehicles();
   const list = await callApi("BusLcInfoInqireService/getRouteAcctoBusLcList", { cityCode: CITY, routeId });
@@ -594,41 +486,293 @@ async function getBusLocations(routeId) {
   })).filter(v => v.lat && v.lng);
 }
 
+/* ===================== 홈 ===================== */
+function renderHome() {
+  $("keyWarn").classList.toggle("hidden", !!serviceKey || demo);
+  $("homeSub").innerHTML = "대전 시내버스 실시간 도착 정보" + (demo ? ' <span class="tag demo">체험 모드</span>' : "");
+  $("favCount").textContent = favs.length ? favs.length + "개" : "";
+  const box = $("favList");
+  if (!favs.length) {
+    box.innerHTML = `<div class="list"><div class="empty"><div class="big">${icon("star", 26)}</div>자주 타는 정류장을 검색하고<br>별을 눌러 추가해 보세요</div></div>`;
+    return;
+  }
+  const list = document.createElement("div");
+  list.className = "list";
+  favs.forEach(s => list.appendChild(stopItem(s)));
+  box.innerHTML = ""; box.appendChild(list);
+}
+
+function stopItem(s, num) {
+  const el = document.createElement("div");
+  el.className = "row-item";
+  const isFav = favs.some(f => f.id === s.id);
+  el.innerHTML = `
+    <div class="ic">${num ? num : icon("stop", 20)}</div>
+    <div class="grow"><div class="row-title">${esc(s.name)}</div><div class="row-sub">${s.no ? esc(s.no) : esc(s.id)}</div></div>
+    <button class="star-btn ${isFav ? "on" : ""}" aria-label="즐겨찾기">${icon("star", 24)}</button>`;
+  el.querySelector(".star-btn").onclick = e => {
+    e.stopPropagation(); const on = toggleFav(s);
+    e.currentTarget.classList.toggle("on", on);
+    if (currentView === "home") { $("favCount").textContent = favs.length ? favs.length + "개" : ""; if (!$("searchArea").innerHTML) renderHome(); else refreshFavOnly(); }
+  };
+  el.onclick = () => openStop(s);
+  return el;
+}
+function refreshFavOnly() {
+  const box = $("favList");
+  if (!favs.length) { renderHome(); return; }
+  const list = document.createElement("div"); list.className = "list";
+  favs.forEach(s => list.appendChild(stopItem(s)));
+  box.innerHTML = ""; box.appendChild(list);
+}
+
+function toggleFav(s) {
+  let on;
+  if (favs.some(f => f.id === s.id)) { favs = favs.filter(f => f.id !== s.id); on = false; toast("즐겨찾기에서 뺐어요"); }
+  else { favs.push({ id: s.id, name: s.name, no: s.no, lat: s.lat, lng: s.lng }); on = true; toast("즐겨찾기에 추가했어요"); }
+  store.set("favs", favs);
+  return on;
+}
+
+function needKey() {
+  if (serviceKey || demo) return false;
+  $("searchArea").innerHTML = errBox(new Error("먼저 설정에서 인증키를 넣거나 체험 모드를 켜 주세요."));
+  return true;
+}
+
+function showResults(title, list, myPos) {
+  const area = $("searchArea");
+  area.innerHTML = `<div class="section-title"><h2>${esc(title)}</h2><span>${list.length ? list.length + "곳" : ""}</span></div>`;
+  if (!list.length) { area.innerHTML += `<div class="list"><div class="empty">검색 결과가 없어요</div></div>`; return; }
+  list = list.slice(0, 40);
+  if (list.some(s => s.lat && s.lng) && window.L) {
+    const mapEl = document.createElement("div"); mapEl.className = "map";
+    area.appendChild(mapEl);
+    const note = document.createElement("div"); note.className = "map-note";
+    note.textContent = "이름이 같은 정류장은 길 건너편일 수 있어요. 번호 핀으로 위치를 확인해 보세요.";
+    area.appendChild(note);
+    drawResultMap(mapEl, list, myPos);
+  }
+  const box = document.createElement("div"); box.className = "list";
+  list.forEach((s, idx) => box.appendChild(stopItem(s, s.lat ? idx + 1 : null)));
+  area.appendChild(box);
+}
+
+$("searchForm").onsubmit = async e => {
+  e.preventDefault();
+  const q = $("searchInput").value.trim();
+  if (!q || needKey()) return;
+  $("searchInput").blur();
+  $("searchArea").innerHTML = `<div class="section-title"><h2>검색 중</h2></div>` + skeleton(3);
+  try { showResults(`'${q}' 검색 결과`, await searchStops(q)); }
+  catch (err) { $("searchArea").innerHTML = errBox(err); }
+};
+
+$("nearBtn").onclick = () => {
+  if (needKey()) return;
+  if (demo) { showResults("내 주변 정류장", DEMO.stops); return; }
+  if (!navigator.geolocation) { $("searchArea").innerHTML = errBox(new Error("이 기기에서는 위치 기능을 쓸 수 없어요.")); return; }
+  $("searchArea").innerHTML = `<div class="section-title"><h2>위치 확인 중</h2></div>` + skeleton(3);
+  navigator.geolocation.getCurrentPosition(async pos => {
+    myPosCache = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    try { showResults("내 주변 정류장", await nearStops(myPosCache.lat, myPosCache.lng), myPosCache); }
+    catch (err) { $("searchArea").innerHTML = errBox(err); }
+  }, err => {
+    $("searchArea").innerHTML = errBox(new Error("위치를 가져오지 못했어요. 위치 권한을 허용해 주세요.\n(" + err.message + ")"));
+  }, { enableHighAccuracy: true, timeout: 10000 });
+};
+
+/* ===================== 지도 ===================== */
+let resultMap = null, stopMapObj = null, myPosCache = null;
+
+function tiles(map) {
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    maxZoom: 19, subdomains: "abcd", attribution: "© OpenStreetMap © CARTO"
+  }).addTo(map);
+}
+const numIcon = n => L.divIcon({ className: "", html: `<div class="pin">${n}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
+const stopIcon = () => L.divIcon({ className: "", html: `<div class="stop-pin">${icon("stop", 18)}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] });
+function meMarker(map, pos) {
+  if (!pos) return;
+  L.marker([pos.lat, pos.lng], { icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false }).addTo(map);
+}
+
+function drawResultMap(el, list, myPos) {
+  if (resultMap) { resultMap.remove(); resultMap = null; }
+  resultMap = L.map(el, { zoomControl: false, attributionControl: true });
+  tiles(resultMap);
+  const pts = [];
+  list.forEach((s, idx) => {
+    if (!s.lat || !s.lng) return;
+    pts.push([s.lat, s.lng]);
+    const m = L.marker([s.lat, s.lng], { icon: numIcon(idx + 1) }).addTo(resultMap);
+    const box = document.createElement("div");
+    box.innerHTML = `<div class="pop-name">${idx + 1}. ${esc(s.name)}</div><div class="pop-sub">${esc(s.no)}</div><button class="pop-btn">도착 정보 보기</button>`;
+    box.querySelector("button").onclick = () => openStop(s);
+    m.bindPopup(box, { closeButton: false });
+  });
+  const me = myPos || myPosCache;
+  if (me) { meMarker(resultMap, me); pts.push([me.lat, me.lng]); }
+  if (pts.length === 1) resultMap.setView(pts[0], 17);
+  else resultMap.fitBounds(pts, { padding: [36, 36], maxZoom: 17 });
+  setTimeout(() => resultMap && resultMap.invalidateSize(), 50);
+}
+
+function drawStopMap(s) {
+  const el = $("stopMap");
+  if (stopMapObj) { stopMapObj.remove(); stopMapObj = null; }
+  if (!s.lat || !s.lng || !window.L) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  stopMapObj = L.map(el, { zoomControl: false, attributionControl: false, dragging: true });
+  tiles(stopMapObj);
+  L.marker([s.lat, s.lng], { icon: stopIcon() }).addTo(stopMapObj);
+  stopMapObj.setView([s.lat, s.lng], 17);
+  if (myPosCache) meMarker(stopMapObj, myPosCache);
+  setTimeout(() => stopMapObj && stopMapObj.invalidateSize(), 50);
+}
+
+function warmMyPos() {
+  if (!navigator.geolocation || demo) return;
+  navigator.geolocation.getCurrentPosition(p => { myPosCache = { lat: p.coords.latitude, lng: p.coords.longitude }; }, () => {}, { timeout: 8000, maximumAge: 60000 });
+}
+
+/* ===================== 정류장 도착정보 ===================== */
+function openStop(s) {
+  currentStop = s;
+  arrivals = []; fetchedAt = 0;
+  stopTimers();
+  $("stopName").textContent = s.name;
+  $("stopNo").innerHTML = s.no ? `<span class="tag">${esc(s.no)}</span>` : "";
+  renderFavBtn();
+  $("arrList").innerHTML = skeleton(4);
+  $("stopStatus").innerHTML = "";
+  showView("stop");
+  drawStopMap(s);
+  refresh();
+  refreshTimer = setInterval(refresh, REFRESH_SEC * 1000);
+  tickTimer = setInterval(tick, 1000);
+}
+function renderFavBtn() {
+  const on = favs.some(f => f.id === currentStop.id);
+  $("favBtn").classList.toggle("on", on);
+  $("favBtn").querySelector("span").textContent = on ? "즐겨찾기됨" : "즐겨찾기";
+}
+$("favBtn").onclick = () => { toggleFav(currentStop); renderFavBtn(); };
+
+function stopTimers() { clearInterval(refreshTimer); clearInterval(tickTimer); refreshTimer = tickTimer = null; }
+
+async function refresh() {
+  if (!currentStop) return;
+  try {
+    arrivals = await getArrivals(currentStop.id);
+    fetchedAt = Date.now();
+    renderArrivals();
+  } catch (err) {
+    $("arrList").innerHTML = errBox(err);
+    $("stopStatus").innerHTML = `<button onclick="refresh()">다시 시도</button>`;
+  }
+}
+
+function remain(a) { return Math.max(0, Math.round(a.sec - (Date.now() - fetchedAt) / 1000)); }
+function fmt(sec) {
+  if (sec < 60) return "곧 도착";
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}분 ${String(s).padStart(2, "0")}초`;
+}
+function routeClass(tp) {
+  if (/급행/.test(tp)) return "c-express";
+  if (/간선/.test(tp)) return "c-trunk";
+  if (/지선/.test(tp)) return "c-branch";
+  if (/외곽|마을|농어촌/.test(tp)) return "c-outer";
+  return "c-trunk";
+}
+const shortTp = tp => String(tp || "").replace(/버스$/, "");
+
+function grouped() {
+  const map = new Map();
+  arrivals.forEach(a => { if (!map.has(a.routeId)) map.set(a.routeId, []); map.get(a.routeId).push(a); });
+  return [...map.values()].map(g => g.sort((x, y) => x.sec - y.sec)).sort((x, y) => x[0].sec - y[0].sec);
+}
+
+function renderArrivals() {
+  const box = $("arrList");
+  const groups = grouped();
+  if (!groups.length) {
+    box.innerHTML = `<div class="list"><div class="empty"><div class="big">${icon("bus", 26)}</div>지금 도착 예정인 버스가 없어요<br>운행 시간이 아닐 수 있어요</div></div>`;
+    tick(); return;
+  }
+  const list = document.createElement("div"); list.className = "list";
+  groups.forEach(g => {
+    const a = g[0], key = currentStop.id + "|" + a.routeId, on = alarms[key];
+    const el = document.createElement("div");
+    el.className = "row-item bus-row";
+    el.innerHTML = `
+      <div class="route"><div class="route-no ${routeClass(a.routeTp)}">${esc(a.routeNo)}</div><div class="route-tp ${routeClass(a.routeTp)}">${esc(shortTp(a.routeTp))}</div></div>
+      <div class="grow">
+        <div class="eta" data-r="${esc(a.routeId)}" data-i="0"></div>
+        <div class="meta">${a.prev}정거장 전${/저상/.test(a.vehicleTp) ? " · 저상" : ""}${g[1] ? ` · <span class="next">다음 <span data-r="${esc(a.routeId)}" data-i="1"></span></span>` : ""}</div>
+      </div>
+      <button class="bell ${on ? "on" : ""}" aria-label="도착 알림">${on ? icon("bell-fill", 16) + on + "분" : icon("bell", 18)}</button>
+      <svg class="chev" width="18" height="18"><use href="#i-chev"/></svg>`;
+    el.querySelector(".bell").onclick = e => { e.stopPropagation(); openSheet(a); };
+    el.onclick = () => openBus(a);
+    list.appendChild(el);
+  });
+  box.innerHTML = ""; box.appendChild(list);
+  tick();
+}
+
+function tick() {
+  if (!fetchedAt) return;
+  const since = Math.round((Date.now() - fetchedAt) / 1000);
+  if (currentView === "stop") $("stopStatus").innerHTML = `${since < 5 ? "방금" : since + "초 전"} 업데이트 <button onclick="refresh()">새로고침</button>`;
+  grouped().forEach(g => {
+    g.slice(0, 2).forEach((a, i) => {
+      const el = document.querySelector(`#arrList [data-r="${CSS.escape(a.routeId)}"][data-i="${i}"]`);
+      if (!el) return;
+      const r = remain(a);
+      el.textContent = i === 0 ? fmt(r) : (r < 60 ? "곧" : Math.floor(r / 60) + "분");
+      if (i === 0) el.className = "eta" + (r < 120 ? " soon" : r < 300 ? " near" : "");
+    });
+    checkAlarm(g[0]);
+  });
+}
+
+/* ===================== 고른 버스 한 대 추적 ===================== */
+let busMapObj = null, busMarker = null, busLine = null, busTimer = null, track = null;
+function stopBusTimer() { clearInterval(busTimer); busTimer = null; }
+
 async function openBus(a) {
-  track = { routeId: a.routeId, routeNo: a.routeNo, startPrev: a.prev, startSec: remain(a),
-            routeStops: null, myOrds: [], vehicleNo: null, bus: null, arr: a, firstFit: true, routeErr: null };
-  $("title").textContent = `${a.routeNo}번 → ${currentStop.name}`;
-  $("busInfo").innerHTML = "";
-  $("busStatus").innerHTML = `<span class="spin">⏳</span> 버스 찾는 중…`;
+  track = { routeId: a.routeId, routeNo: a.routeNo, routeTp: a.routeTp, startPrev: a.prev,
+            routeStops: null, myOrds: [], myOrd: null, vehicleNo: null, bus: null, firstFit: true, routeErr: null };
+  $("busInfo").innerHTML = busHead() + `<div class="sk" style="height:38px;width:60%;margin:14px 0 8px"></div><div class="sk" style="height:16px;width:80%"></div>`;
   showView("bus");
 
   if (busMapObj) { busMapObj.remove(); busMapObj = null; }
   busMarker = busLine = null;
   if (window.L) {
-    busMapObj = L.map($("busMap"));
+    busMapObj = L.map($("busMap"), { zoomControl: false, attributionControl: true });
     tiles(busMapObj);
     if (currentStop.lat) {
       busMapObj.setView([currentStop.lat, currentStop.lng], 16);
-      L.marker([currentStop.lat, currentStop.lng], { icon: numIcon("🚏", true) }).addTo(busMapObj)
-        .bindPopup(`<b>${escapeHtml(currentStop.name)}</b><br>내가 탈 정류장`);
+      L.marker([currentStop.lat, currentStop.lng], { icon: stopIcon(), zIndexOffset: 500 }).addTo(busMapObj)
+        .bindPopup(`<div class="pop-name">${esc(currentStop.name)}</div><div class="pop-sub">내가 탈 정류장</div>`, { closeButton: false });
     } else busMapObj.setView([36.3504, 127.3845], 13);
     if (myPosCache) meMarker(busMapObj, myPosCache);
     setTimeout(() => busMapObj && busMapObj.invalidateSize(), 50);
   }
-
-  // 노선 정류장 순서 (내 정류장이 몇 번째인지 알아야 '그 버스'를 고를 수 있음)
   try {
     track.routeStops = await getRouteStops(a.routeId);
     track.myOrds = track.routeStops.filter(s => s.id === currentStop.id).map(s => s.ord);
   } catch (err) { track.routeErr = err; }
-
   await busRefresh();
   busTimer = setInterval(busRefresh, BUS_REFRESH_SEC * 1000);
 }
 
-function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function busHead() {
+  return `<div class="bs-top"><span class="route-chip ${routeClass(track.routeTp)}">${esc(track.routeNo)}</span><span class="bs-dest">${esc(currentStop.name)} 방면으로 오는 중</span></div>`;
+}
 
-// "N정거장 전" 정보로 정확히 그 버스 한 대를 고름
 function pickBus(vehicles) {
   if (track.vehicleNo) return vehicles.find(v => v.vehicleNo === track.vehicleNo) || null;
   if (!track.myOrds.length) return null;
@@ -636,7 +780,7 @@ function pickBus(vehicles) {
   for (const myOrd of track.myOrds) {
     const target = myOrd - track.startPrev;
     for (const v of vehicles) {
-      if (v.ord > myOrd) continue;                 // 이미 지나간 버스 제외
+      if (v.ord > myOrd) continue;
       const score = Math.abs(v.ord - target);
       if (score < bestScore) { bestScore = score; best = { ...v, myOrd }; }
     }
@@ -647,68 +791,52 @@ function pickBus(vehicles) {
 
 async function busRefresh() {
   if (!track) return;
+  const info = $("busInfo");
   let vehicles;
   try { vehicles = await getBusLocations(track.routeId); }
-  catch (err) { $("busStatus").textContent = ""; $("busInfo").innerHTML = ""; showErr($("busInfo"), err); return; }
+  catch (err) { info.innerHTML = busHead() + `<div style="margin-top:14px">${errBox(err)}</div>`; return; }
 
   const v = pickBus(vehicles);
-  const info = $("busInfo");
-
   if (!v) {
-    if (track.vehicleNo) {
-      info.innerHTML = `<div class="card help"><b>${escapeHtml(track.routeNo)}번 (${escapeHtml(track.vehicleNo)})</b> 버스가 더 이상 안 보여요.<br>정류장을 지나갔거나 운행 정보가 잠시 끊겼을 수 있어요.</div>`;
-    } else if (track.routeErr) {
-      info.innerHTML = "";
-      showErr(info, new Error("노선 정보를 못 불러와서 어떤 버스인지 고를 수 없어요.\ndata.go.kr에서 '국토교통부_(TAGO)_버스노선정보'도 활용신청해 주세요.\n\n(" + track.routeErr.message + ")"));
-    } else {
-      info.innerHTML = `<div class="card help">지금 그 ${escapeHtml(track.routeNo)}번 버스 위치를 찾지 못했어요. 잠시 후 다시 시도할게요.</div>`;
-    }
-    $("busStatus").textContent = `${BUS_REFRESH_SEC}초마다 자동 갱신`;
+    let msg;
+    if (track.vehicleNo) msg = `<div class="bs-eta" style="font-size:24px">버스가 안 보여요</div><div class="bs-sub">정류장을 지나갔거나 운행 정보가 잠시 끊겼을 수 있어요.</div>`;
+    else if (track.routeErr) msg = `<div style="margin-top:14px">${errBox(new Error("노선 정보를 불러오지 못해 어떤 버스인지 고를 수 없어요.\n'국토교통부_(TAGO)_버스노선정보'도 활용신청해 주세요.\n(" + track.routeErr.message + ")"))}</div>`;
+    else msg = `<div class="bs-eta" style="font-size:24px">버스를 찾는 중이에요</div><div class="bs-sub">잠시 후 다시 확인할게요.</div>`;
+    info.innerHTML = busHead() + msg;
     return;
   }
   track.bus = v;
 
-  // 남은 정거장 수 / 남은 시간 (도착정보에서 같은 노선 중 정거장 수가 맞는 항목 사용)
   const left = track.myOrd != null ? Math.max(0, track.myOrd - v.ord) : null;
-  const sameRoute = arrivals.filter(x => x.routeId === track.routeId);
+  const same = arrivals.filter(x => x.routeId === track.routeId);
   let arr = null;
-  if (sameRoute.length) {
-    arr = left != null ? sameRoute.reduce((p, c) => Math.abs(c.prev - left) < Math.abs(p.prev - left) ? c : p) : sameRoute[0];
-  }
-  const timeText = arr ? fmt(remain(arr)) : "";
+  if (same.length) arr = left != null ? same.reduce((p, c) => Math.abs(c.prev - left) < Math.abs(p.prev - left) ? c : p) : same[0];
+  const r = arr ? remain(arr) : null;
+  const etaText = r == null ? `${left}정거장 전` : r < 60 ? "곧 도착해요" : fmt(r).replace(/ \d+초$/, "") + " 후 도착";
 
-  info.innerHTML = `
-    <div class="bus" style="cursor:default">
-      <div class="badge ${badgeClass(track.arr.routeTp)}"></div>
-      <div class="grow">
-        <div class="arr ${arr && remain(arr) < 120 ? "soon" : ""}"></div>
-        <div class="sub"></div>
-        <div class="sub"></div>
-      </div>
-    </div>`;
-  info.querySelector(".badge").textContent = track.routeNo;
-  info.querySelector(".arr").textContent = timeText ? timeText + (timeText === "곧 도착" ? "" : " 남음") : (left != null ? `${left}정거장 전` : "");
-  const subs = info.querySelectorAll(".sub");
-  subs[0].textContent = (left != null ? `${left}정거장 전 · ` : "") + "지금 " + (v.nodeName || "-") + " 부근";
-  subs[1].textContent = "차량 " + v.vehicleNo;
+  const total = Math.max(track.startPrev, left ?? 0, 1);
+  const bars = left != null ? Array.from({ length: Math.min(total, 12) }, (_, i) => {
+    const pos = Math.min(total, 12) - Math.min(left, 12);
+    return `<i class="${i < pos ? "done" : i === pos ? "bus" : ""}"></i>`;
+  }).join("") : "";
 
-  $("busStatus").textContent = `방금 업데이트 · ${BUS_REFRESH_SEC}초마다 자동 갱신`;
+  info.innerHTML = busHead() + `
+    <div class="bs-eta ${r != null && r < 120 ? "soon" : ""}">${esc(etaText)}</div>
+    <div class="bs-sub">${left != null ? `<b>${left}정거장</b> 전 · ` : ""}지금 ${esc(v.nodeName || "-")} 부근</div>
+    ${bars ? `<div class="stops-bar">${bars}</div>` : ""}
+    <div class="bs-foot"><span>${esc(v.vehicleNo)}</span><span>${BUS_REFRESH_SEC}초마다 위치 갱신</span></div>`;
 
-  // 지도
   if (!busMapObj) return;
   const ll = [v.lat, v.lng];
   if (!busMarker) {
-    busMarker = L.marker(ll, { icon: L.divIcon({ className: "", html: '<div class="bus-pin coming">🚌</div>', iconSize: [34, 34], iconAnchor: [17, 17] }), zIndexOffset: 1000 }).addTo(busMapObj);
+    busMarker = L.marker(ll, { icon: L.divIcon({ className: "", html: `<div class="bus-pin">${icon("bus", 20)}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }), zIndexOffset: 1000 }).addTo(busMapObj);
   } else busMarker.setLatLng(ll);
-  busMarker.bindPopup(`<b>${escapeHtml(track.routeNo)}번</b><br>${escapeHtml(v.vehicleNo)}<br>${escapeHtml(v.nodeName || "")} 부근`);
 
-  // 버스 → 내 정류장까지 남은 경로
   if (busLine) { busLine.remove(); busLine = null; }
   if (track.routeStops && track.myOrd != null) {
-    const path = track.routeStops.filter(s => s.ord >= v.ord && s.ord <= track.myOrd && s.lat).map(s => [s.lat, s.lng]);
-    if (path.length) busLine = L.polyline([ll, ...path], { color: "#0b5cff", weight: 5, opacity: .7, dashArray: "8 8" }).addTo(busMapObj);
+    const path = track.routeStops.filter(s => s.ord > v.ord && s.ord <= track.myOrd && s.lat).map(s => [s.lat, s.lng]);
+    busLine = L.polyline([ll, ...path], { color: "#3182f6", weight: 6, opacity: .85, lineCap: "round", lineJoin: "round" }).addTo(busMapObj);
   }
-
   if (track.firstFit) { fitBoth(); track.firstFit = false; }
 }
 
@@ -718,8 +846,9 @@ function fitBoth() {
   if (track?.bus) pts.push([track.bus.lat, track.bus.lng]);
   if (currentStop?.lat) pts.push([currentStop.lat, currentStop.lng]);
   if (busLine) busLine.getLatLngs().forEach(p => pts.push([p.lat, p.lng]));
+  const sheetH = document.querySelector(".bus-sheet").offsetHeight || 260;
   if (pts.length === 1) busMapObj.setView(pts[0], 16);
-  else if (pts.length) busMapObj.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
+  else if (pts.length) busMapObj.fitBounds(pts, { paddingTopLeft: [40, 110], paddingBottomRight: [70, sheetH + 30], maxZoom: 17 });
 }
 $("fitBothBtn").onclick = fitBoth;
 $("fitStopBtn").onclick = () => busMapObj && currentStop?.lat && busMapObj.setView([currentStop.lat, currentStop.lng], 17);
@@ -730,86 +859,71 @@ let sheetBus = null;
 function openSheet(a) {
   unlockAudio();
   sheetBus = a;
+  const cur = alarms[currentStop.id + "|" + a.routeId];
   $("sheetTitle").textContent = `${a.routeNo}번 도착 알림`;
-  const chips = $("chips");
-  chips.innerHTML = "";
+  $("chips").innerHTML = "";
   [1, 2, 3, 5, 7, 10, 15, 20].forEach(m => {
     const b = document.createElement("button");
-    b.className = "chip"; b.textContent = m + "분";
-    b.onclick = () => { setAlarm(a, m); closeSheet(); };
-    chips.appendChild(b);
+    b.className = "chip" + (cur === m ? " on" : ""); b.textContent = m + "분 전";
+    b.onclick = () => { setAlarm(a, m); closeSheet(); toast(`${a.routeNo}번 ${m}분 전에 알려드릴게요`); };
+    $("chips").appendChild(b);
   });
+  $("sheetOff").classList.toggle("hidden", !cur);
   $("sheetBg").classList.add("show");
 }
 function closeSheet() { $("sheetBg").classList.remove("show"); }
 $("sheetClose").onclick = closeSheet;
 $("sheetBg").onclick = e => { if (e.target === $("sheetBg")) closeSheet(); };
-$("sheetOff").onclick = () => { setAlarm(sheetBus, 0); closeSheet(); };
+$("sheetOff").onclick = () => { setAlarm(sheetBus, 0); closeSheet(); toast("알림을 껐어요"); };
 
+const tripKeys = (key, a) => { const base = Math.round(a.sec / 60 + fetchedAt / 60000); return Array.from({ length: 7 }, (_, i) => key + "|" + (base + i - 3)); };
 function setAlarm(a, minutes) {
   const key = currentStop.id + "|" + a.routeId;
   if (minutes) alarms[key] = minutes; else delete alarms[key];
-  // 이미 그 시간 안에 들어와 있는 버스는 바로 울리지 않도록 표시
-  if (minutes && remain(a) <= minutes * 60)
-    for (let d = -3; d <= 3; d++) fired.add(key + "|" + (Math.round(a.sec / 60 + fetchedAt / 60000) + d));
+  if (minutes && remain(a) <= minutes * 60) tripKeys(key, a).forEach(k => fired.add(k));
   store.set("alarms", alarms);
   renderArrivals();
 }
-
 function checkAlarm(a) {
-  const key = currentStop.id + "|" + a.routeId;
-  const min = alarms[key];
+  const key = currentStop.id + "|" + a.routeId, min = alarms[key];
   if (!min) return;
   const r = remain(a);
-  // 버스 회차 식별: 예상 도착 시각(분 단위)
-  const tripId = key + "|" + Math.round(a.sec / 60 + fetchedAt / 60000);
-  if (r <= min * 60 && !fired.has(tripId)) {
-    // 같은 버스가 갱신으로 시각이 1~2분 흔들려도 중복 알림 안 되게 주변 값도 등록
-    for (let d = -3; d <= 3; d++) fired.add(key + "|" + (Math.round(a.sec / 60 + fetchedAt / 60000) + d));
-    fireAlarm(a, r);
-  }
+  const base = key + "|" + Math.round(a.sec / 60 + fetchedAt / 60000);
+  if (r <= min * 60 && !fired.has(base)) { tripKeys(key, a).forEach(k => fired.add(k)); fireAlarm(a, r); }
 }
 
 let audioCtx = null, beepTimer = null;
-function unlockAudio() {
-  try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {}
-}
+function unlockAudio() { try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch {} }
 function beep() {
   if (!audioCtx) return;
   try {
-    [0, 0.25].forEach(t => {
+    [0, 0.18, 0.36].forEach((t, i) => {
       const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-      o.type = "square"; o.frequency.value = 880;
-      g.gain.setValueAtTime(0.2, audioCtx.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + t + 0.2);
+      o.type = "sine"; o.frequency.value = [880, 1175, 1568][i];
+      g.gain.setValueAtTime(0.25, audioCtx.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + t + 0.3);
       o.connect(g); g.connect(audioCtx.destination);
-      o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + 0.2);
+      o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + 0.3);
     });
   } catch {}
 }
-
 function fireAlarm(a, r) {
   $("alarmRoute").textContent = a.routeNo + "번";
-  $("alarmMsg").textContent = `${currentStop.name}\n${r < 60 ? "곧 도착해요!" : Math.ceil(r / 60) + "분 후 도착해요!"}`;
-  $("alarmMsg").style.whiteSpace = "pre-line";
+  $("alarmMsg").textContent = `${currentStop.name}\n${r < 60 ? "곧 도착해요" : Math.ceil(r / 60) + "분 후 도착해요"}`;
   $("alarmBg").classList.add("show");
   try { navigator.vibrate && navigator.vibrate([400, 200, 400, 200, 400]); } catch {}
-  beep();
-  clearInterval(beepTimer);
-  beepTimer = setInterval(() => { beep(); try { navigator.vibrate && navigator.vibrate(300); } catch {} }, 1500);
+  beep(); clearInterval(beepTimer);
+  beepTimer = setInterval(() => { beep(); try { navigator.vibrate && navigator.vibrate(300); } catch {} }, 1600);
   setTimeout(() => clearInterval(beepTimer), 30000);
-  // 브라우저 알림 (지원되는 경우만)
-  try {
-    if ("Notification" in window && Notification.permission === "granted") new Notification(`🚌 ${a.routeNo}번 ${r < 60 ? "곧 도착" : Math.ceil(r / 60) + "분 후 도착"}`, { body: currentStop.name });
-  } catch {}
+  try { if ("Notification" in window && Notification.permission === "granted") new Notification(`${a.routeNo}번 ${r < 60 ? "곧 도착" : Math.ceil(r / 60) + "분 후 도착"}`, { body: currentStop.name }); } catch {}
 }
 $("alarmStop").onclick = () => { $("alarmBg").classList.remove("show"); clearInterval(beepTimer); };
 
-/* ===================== 당겨서 새로고침 ===================== */
+/* ===================== 기타 이벤트 ===================== */
 let startY = null;
 window.addEventListener("touchstart", e => { if (window.scrollY === 0) startY = e.touches[0].clientY; }, { passive: true });
 window.addEventListener("touchend", e => {
-  if (startY != null && !$("stopView").classList.contains("hidden") && e.changedTouches[0].clientY - startY > 90) refresh();
+  if (startY != null && currentView === "stop" && e.changedTouches[0].clientY - startY > 90) { refresh(); toast("새로고침했어요"); }
   startY = null;
 }, { passive: true });
 document.addEventListener("visibilitychange", () => {
@@ -824,34 +938,34 @@ $("saveKeyBtn").onclick = () => {
   store.set("key", serviceKey);
   if (serviceKey && demo) { demo = false; store.set("demo", false); }
   try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch {}
+  toast(serviceKey ? "인증키를 저장했어요" : "인증키를 지웠어요");
   showView("home");
 };
-function renderDemoToggle() {
-  $("demoToggle").textContent = demo ? "체험 모드 끄기" : "체험 모드 켜기 (가짜 데이터)";
-  $("demoToggle").onclick = () => { demo = !demo; store.set("demo", demo); renderDemoToggle(); };
+function renderDemoSwitch() {
+  $("demoSwitch").classList.toggle("on", demo);
+  $("demoSwitch").onclick = () => { demo = !demo; store.set("demo", demo); renderDemoSwitch(); };
 }
 function enableDemo() { demo = true; store.set("demo", true); showView("home"); }
 
-/* ===================== 체험 모드 데이터 (가짜) ===================== */
+/* ===================== 체험 모드 (가짜 데이터) ===================== */
 const DEMO = {
   stops: [
-    { id: "DEMO1", name: "대전역 (체험)", no: "00001", lat: 36.33190, lng: 127.43280 },
-    { id: "DEMO1B", name: "대전역 (체험)", no: "00011", lat: 36.33165, lng: 127.43335 },
-    { id: "DEMO2", name: "시청 (체험)", no: "00002", lat: 36.35060, lng: 127.38470 },
-    { id: "DEMO3", name: "충남대학교 (체험)", no: "00003", lat: 36.36640, lng: 127.34460 }
+    { id: "DEMO1", name: "대전역", no: "00001", lat: 36.33190, lng: 127.43280 },
+    { id: "DEMO1B", name: "대전역", no: "00011", lat: 36.33165, lng: 127.43335 },
+    { id: "DEMO2", name: "대전시청", no: "00002", lat: 36.35060, lng: 127.38470 },
+    { id: "DEMO3", name: "충남대학교", no: "00003", lat: 36.36640, lng: 127.34460 }
   ],
-  // 내 정류장(8번째)으로 오는 가짜 노선: 남서쪽에서 들어옴
   routeStops(stop) {
     const lat = stop.lat || 36.3319, lng = stop.lng || 127.4328;
     return Array.from({ length: 12 }, (_, k) => {
       const ord = k + 1, d = 8 - ord;
-      return { id: ord === 8 ? stop.id : "DS" + ord, name: ord === 8 ? stop.name : `체험정류장${ord}`, ord,
+      return { id: ord === 8 ? stop.id : "DS" + ord, name: ord === 8 ? stop.name : `체험정류장 ${ord}`, ord,
                lat: lat - d * 0.0016 + Math.sin(ord) * 0.0004, lng: lng - d * 0.0019 };
     });
   },
   vehicles() {
     const rs = DEMO.routeStops(currentStop);
-    const t = (Date.now() / 1000) % 240 / 240;           // 4분에 정류장 6개 이동
+    const t = (Date.now() / 1000) % 240 / 240;
     const mk = (no, pos) => {
       const i = Math.min(Math.floor(pos), 10), f = pos - i, a = rs[i], b = rs[i + 1];
       return { vehicleNo: no, ord: a.ord, nodeId: a.id, nodeName: a.name, lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
@@ -865,7 +979,8 @@ const DEMO = {
       { routeId: "D1", routeNo: "급행1", routeTp: "급행버스", sec: r(700, 900), prev: 6, vehicleTp: "" },
       { routeId: "D2", routeNo: "102", routeTp: "간선버스", sec: r(300, 500), prev: 3, vehicleTp: "" },
       { routeId: "D3", routeNo: "311", routeTp: "지선버스", sec: r(500, 1100), prev: 7, vehicleTp: "저상버스" },
-      { routeId: "D4", routeNo: "605", routeTp: "간선버스", sec: r(20, 60), prev: 0, vehicleTp: "" }
+      { routeId: "D4", routeNo: "605", routeTp: "간선버스", sec: r(20, 60), prev: 0, vehicleTp: "" },
+      { routeId: "D5", routeNo: "외곽2", routeTp: "외곽버스", sec: r(1300, 1700), prev: 11, vehicleTp: "" }
     ];
   }
 };
